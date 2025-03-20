@@ -1,12 +1,47 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { Formik, Form, Field, ErrorMessage, FieldArray } from 'formik';
 import * as Yup from 'yup';
 import { motion, AnimatePresence } from 'framer-motion';
 import { OnboardingContext } from '../../context/OnboardingContext';
 
+// Logging function to debug context data
+const logContextData = (data) => {
+  console.log("Current Onboarding Data:", {
+    teamMembers: data.teamMembers,
+    roles: data.roles
+  });
+};
+
+// Helper function to extract titles from localStorage directly
+// This is a fallback method since titles in Step2 might not be in context
+const getTitlesFromLocalStorage = () => {
+  try {
+    // First try to get titles from dedicated storage
+    const storedTitles = localStorage.getItem('taskflow_team_titles');
+    if (storedTitles) {
+      return JSON.parse(storedTitles);
+    }
+    
+    // Otherwise try to extract from team members
+    const savedData = localStorage.getItem('taskflow_onboarding_progress');
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      if (parsedData.teamMembers && Array.isArray(parsedData.teamMembers)) {
+        return parsedData.teamMembers
+          .map(member => member.title)
+          .filter(title => title)
+          .filter((value, index, self) => self.indexOf(value) === index);
+      }
+    }
+    
+    return [];
+  } catch (e) {
+    console.error("Error accessing localStorage:", e);
+    return [];
+  }
+};
+
 const validationSchema = Yup.object({
-  name: Yup.string().required('Role name is required'),
-  description: Yup.string().required('Description is required'),
   permissions: Yup.array().min(1, 'Select at least one permission')
 });
 
@@ -26,32 +61,146 @@ const allPermissions = [
 
 const Step3Roles = () => {
   const { onboardingData, addRole, removeRole, updateRole } = useContext(OnboardingContext);
-  const [isAddingRole, setIsAddingRole] = useState(false);
-  const [editingRoleId, setEditingRoleId] = useState(null);
+  const [editingTitleId, setEditingTitleId] = useState(null);
   
-  const handleAddRole = (values, { resetForm }) => {
-    addRole({
-      name: values.name,
-      description: values.description,
-      permissions: values.permissions
+  // Get initial titles from localStorage as a fallback
+  const initialTitles = getTitlesFromLocalStorage().map(title => ({
+    title,
+    id: `title_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    permissions: [],
+    description: `Permissions for ${title}`
+  }));
+  
+  // Initialize with titles from localStorage if available
+  const [titlesWithPermissions, setTitlesWithPermissions] = useState(initialTitles);
+  
+  // Log data when component mounts to see what we're working with
+  useEffect(() => {
+    logContextData(onboardingData);
+    console.log("Initial Titles from localStorage:", initialTitles);
+  }, [onboardingData]);
+  
+  // Extract titles from previous steps
+  useEffect(() => {
+    console.log("Team Members:", onboardingData.teamMembers);
+    
+    // Get unique titles from team members
+    const teamMemberTitles = onboardingData.teamMembers
+      .map(member => member.title)
+      .filter(title => title) // Make sure title exists
+      .filter((value, index, self) => self.indexOf(value) === index);
+    
+    console.log("Team Member Titles:", teamMemberTitles);
+    
+    // Check if there's a titles array in the context
+    // This looks for titles stored directly in onboardingData from Step 2
+    const storedTitles = onboardingData.titles || [];
+    console.log("Stored Titles:", storedTitles);
+    
+    // Combine titles from both sources
+    let allTitles = [...teamMemberTitles, ...storedTitles];
+    
+    // If we still don't have titles, check localStorage directly
+    if (allTitles.length === 0) {
+      try {
+        const savedData = localStorage.getItem('taskflow_onboarding_progress');
+        if (savedData) {
+          const parsedData = JSON.parse(savedData);
+          console.log("Data from localStorage:", parsedData);
+          
+          // Extract titles if they exist
+          if (parsedData.titles && Array.isArray(parsedData.titles)) {
+            allTitles = [...allTitles, ...parsedData.titles];
+          }
+          
+          // Also check team members from localStorage
+          if (parsedData.teamMembers && Array.isArray(parsedData.teamMembers)) {
+            const titlesFromStorage = parsedData.teamMembers
+              .map(member => member.title)
+              .filter(title => title)
+              .filter((value, index, self) => self.indexOf(value) === index);
+            
+            allTitles = [...allTitles, ...titlesFromStorage];
+          }
+        }
+      } catch (e) {
+        console.error("Error accessing localStorage:", e);
+      }
+    }
+    
+    // Add "Admin" title if not already present
+    if (!allTitles.includes("Admin")) {
+      allTitles.push("Admin");
+    }
+    
+    // Add any existing titles with permissions
+    const existingRoleTitles = onboardingData.roles.map(role => role.name);
+    console.log("Existing Role Titles:", existingRoleTitles);
+    
+    // Combine unique titles that need permissions assigned
+    const allUniqueTitles = [...new Set([...allTitles, ...existingRoleTitles])];
+    console.log("All Unique Titles:", allUniqueTitles);
+    
+    // Create a mapping of titles with their permissions (if already assigned)
+    const mappedTitles = allUniqueTitles.map(title => {
+      const existingRole = onboardingData.roles.find(role => role.name === title);
+      return {
+        title,
+        id: existingRole?.id || `title_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        permissions: existingRole?.permissions || [],
+        description: existingRole?.description || `Permissions for ${title}`
+      };
     });
+    
+    console.log("Mapped Titles:", mappedTitles);
+    setTitlesWithPermissions(mappedTitles);
+  }, [onboardingData]);
+
+  const handleUpdatePermissions = (values, { resetForm }) => {
+    const titleToUpdate = titlesWithPermissions.find(t => t.id === editingTitleId);
+    
+    // Check if this title already exists as a role
+    const existingRoleIndex = onboardingData.roles.findIndex(role => role.id === editingTitleId);
+    
+    if (existingRoleIndex >= 0) {
+      // Update existing role
+      updateRole(editingTitleId, {
+        name: titleToUpdate.title,
+        description: titleToUpdate.description,
+        permissions: values.permissions
+      });
+    } else {
+      // Create new role based on title
+      addRole({
+        name: titleToUpdate.title,
+        description: titleToUpdate.description,
+        permissions: values.permissions
+      });
+    }
+    
+    // Update local state
+    setTitlesWithPermissions(prev => 
+      prev.map(t => t.id === editingTitleId 
+        ? { ...t, permissions: values.permissions } 
+        : t
+      )
+    );
+    
     resetForm();
-    setIsAddingRole(false);
+    setEditingTitleId(null);
   };
   
-  const handleUpdateRole = (values, { resetForm }) => {
-    updateRole(editingRoleId, {
-      name: values.name,
-      description: values.description,
-      permissions: values.permissions
-    });
-    resetForm();
-    setEditingRoleId(null);
+  const startEditing = (titleId) => {
+    setEditingTitleId(titleId);
   };
-  
-  const startEditing = (role) => {
-    setEditingRoleId(role.id);
-    setIsAddingRole(false);
+
+  // Helper to get permissions for a title
+  const getTitlePermissions = (titleId) => {
+    const title = titlesWithPermissions.find(t => t.id === titleId);
+    if (!title) return [];
+    
+    const existingRole = onboardingData.roles.find(role => role.name === title.title);
+    return existingRole?.permissions || title.permissions || [];
   };
 
   return (
@@ -61,31 +210,18 @@ const Step3Roles = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <h2 className="text-2xl font-bold text-secondary-900 mb-2">Configure Roles & Permissions</h2>
+        <h2 className="text-2xl font-bold text-secondary-900 mb-2">Configure Permissions for Titles</h2>
         <p className="text-secondary-600 mb-8">
-          Define the roles in your organization and the permissions each role should have.
-          You can customize these further at any time.
+          Assign permissions to each title in your organization. These permissions will determine what actions team members with each title can perform.
         </p>
 
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-secondary-900">Roles</h3>
-            {!isAddingRole && !editingRoleId && (
-              <button
-                type="button"
-                onClick={() => setIsAddingRole(true)}
-                className="btn btn-primary"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                Add New Role
-              </button>
-            )}
+            <h3 className="text-lg font-medium text-secondary-900">Title Permissions</h3>
           </div>
           
           <AnimatePresence>
-            {(isAddingRole || editingRoleId) && (
+            {editingTitleId && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -94,14 +230,11 @@ const Step3Roles = () => {
               >
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="font-medium text-secondary-900">
-                    {editingRoleId ? 'Edit Role' : 'Add a new role'}
+                    Assign Permissions for "{titlesWithPermissions.find(t => t.id === editingTitleId)?.title}"
                   </h4>
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsAddingRole(false);
-                      setEditingRoleId(null);
-                    }}
+                    onClick={() => setEditingTitleId(null)}
                     className="text-secondary-500 hover:text-secondary-700"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -111,53 +244,14 @@ const Step3Roles = () => {
                 </div>
 
                 <Formik
-                  initialValues={
-                    editingRoleId
-                      ? {
-                          name: onboardingData.roles.find(r => r.id === editingRoleId)?.name || '',
-                          description: onboardingData.roles.find(r => r.id === editingRoleId)?.description || '',
-                          permissions: onboardingData.roles.find(r => r.id === editingRoleId)?.permissions || []
-                        }
-                      : {
-                          name: '',
-                          description: '',
-                          permissions: []
-                        }
-                  }
+                  initialValues={{
+                    permissions: getTitlePermissions(editingTitleId)
+                  }}
                   validationSchema={validationSchema}
-                  onSubmit={editingRoleId ? handleUpdateRole : handleAddRole}
+                  onSubmit={handleUpdatePermissions}
                 >
                   {({ isSubmitting, errors, touched, values }) => (
                     <Form className="space-y-6">
-                      <div>
-                        <label htmlFor="name" className="label">
-                          Role Name
-                        </label>
-                        <Field
-                          id="name"
-                          name="name"
-                          type="text"
-                          className={`input ${errors.name && touched.name ? 'border-danger-500' : ''}`}
-                          placeholder="e.g., Project Manager"
-                        />
-                        <ErrorMessage name="name" component="div" className="mt-1 text-sm text-danger-600" />
-                      </div>
-
-                      <div>
-                        <label htmlFor="description" className="label">
-                          Description
-                        </label>
-                        <Field
-                          as="textarea"
-                          id="description"
-                          name="description"
-                          rows={3}
-                          className={`input ${errors.description && touched.description ? 'border-danger-500' : ''}`}
-                          placeholder="Describe the responsibilities of this role"
-                        />
-                        <ErrorMessage name="description" component="div" className="mt-1 text-sm text-danger-600" />
-                      </div>
-
                       <div>
                         <label className="label">
                           Permissions
@@ -194,10 +288,7 @@ const Step3Roles = () => {
                       <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={() => {
-                            setIsAddingRole(false);
-                            setEditingRoleId(null);
-                          }}
+                          onClick={() => setEditingTitleId(null)}
                           className="btn btn-secondary mr-2"
                         >
                           Cancel
@@ -207,9 +298,7 @@ const Step3Roles = () => {
                           disabled={isSubmitting}
                           className="btn btn-primary"
                         >
-                          {isSubmitting 
-                            ? (editingRoleId ? 'Updating...' : 'Adding...') 
-                            : (editingRoleId ? 'Update Role' : 'Add Role')}
+                          {isSubmitting ? 'Saving...' : 'Save Permissions'}
                         </button>
                       </div>
                     </Form>
@@ -219,63 +308,65 @@ const Step3Roles = () => {
             )}
           </AnimatePresence>
 
-          {onboardingData.roles.length > 0 ? (
+          {titlesWithPermissions.length > 0 ? (
             <div className="space-y-4">
-              {onboardingData.roles.map((role) => (
-                <motion.div
-                  key={role.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="bg-white rounded-lg border border-secondary-200 overflow-hidden"
-                >
-                  <div className="px-6 py-4">
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-lg font-semibold text-secondary-900">{role.name}</h4>
-                      <div className="flex space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => startEditing(role)}
-                          className="text-primary-600 hover:text-primary-800"
-                          disabled={editingRoleId !== null || isAddingRole}
-                        >
-                          Edit
-                        </button>
-                        {/* Don't allow removing the Admin role */}
-                        {role.name !== 'Admin' && (
+              {titlesWithPermissions.map((titleItem) => {
+                // Find if this title exists as a role with permissions
+                const roleWithPermissions = onboardingData.roles.find(role => role.name === titleItem.title);
+                const permissionIds = roleWithPermissions?.permissions || titleItem.permissions || [];
+                
+                return (
+                  <motion.div
+                    key={titleItem.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="bg-white rounded-lg border border-secondary-200 overflow-hidden"
+                  >
+                    <div className="px-6 py-4">
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-lg font-semibold text-secondary-900">{titleItem.title}</h4>
+                        <div className="flex space-x-2">
                           <button
                             type="button"
-                            onClick={() => removeRole(role.id)}
-                            className="text-danger-600 hover:text-danger-800"
-                            disabled={editingRoleId !== null || isAddingRole}
+                            onClick={() => startEditing(titleItem.id)}
+                            className="text-primary-600 hover:text-primary-800"
+                            disabled={editingTitleId !== null}
                           >
-                            Remove
+                            {permissionIds.length > 0 ? 'Edit Permissions' : 'Assign Permissions'}
                           </button>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3">
+                        {permissionIds.length > 0 ? (
+                          <>
+                            <h5 className="text-sm font-medium text-secondary-700 mb-2">Assigned Permissions:</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {permissionIds.map((permId) => {
+                                const permission = allPermissions.find(p => p.id === permId);
+                                return permission ? (
+                                  <span 
+                                    key={permId} 
+                                    className="px-2 py-1 text-xs bg-secondary-100 text-secondary-800 rounded-full"
+                                    title={permission.description}
+                                  >
+                                    {permission.name}
+                                  </span>
+                                ) : null;
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-secondary-500 mt-2 text-sm italic">
+                            No permissions assigned yet. Click 'Assign Permissions' to configure.
+                          </div>
                         )}
                       </div>
                     </div>
-                    <p className="text-secondary-600 mt-1">{role.description}</p>
-                    
-                    <div className="mt-3">
-                      <h5 className="text-sm font-medium text-secondary-700 mb-2">Permissions:</h5>
-                      <div className="flex flex-wrap gap-2">
-                        {role.permissions.map((permId) => {
-                          const permission = allPermissions.find(p => p.id === permId);
-                          return permission ? (
-                            <span 
-                              key={permId} 
-                              className="px-2 py-1 text-xs bg-secondary-100 text-secondary-800 rounded-full"
-                              title={permission.description}
-                            >
-                              {permission.name}
-                            </span>
-                          ) : null;
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12 bg-secondary-50 rounded-lg border border-dashed border-secondary-300">
@@ -293,20 +384,44 @@ const Step3Roles = () => {
                   d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-secondary-900">No roles defined</h3>
+              <h3 className="mt-2 text-sm font-medium text-secondary-900">No titles found</h3>
               <p className="mt-1 text-sm text-secondary-500">
-                Get started by creating your first role.
+                We couldn't find any titles to configure permissions for.
               </p>
               <div className="mt-6">
+                <p className="text-secondary-600 mb-4">
+                  Let's add some default titles to get started:
+                </p>
                 <button
                   type="button"
-                  onClick={() => setIsAddingRole(true)}
+                  onClick={() => {
+                    setTitlesWithPermissions([
+                      {
+                        title: "Admin",
+                        id: `title_${Date.now()}_1`,
+                        permissions: [],
+                        description: "Permissions for Admin"
+                      },
+                      {
+                        title: "Manager",
+                        id: `title_${Date.now()}_2`,
+                        permissions: [],
+                        description: "Permissions for Manager"
+                      },
+                      {
+                        title: "Team Member",
+                        id: `title_${Date.now()}_3`,
+                        permissions: [],
+                        description: "Permissions for Team Member"
+                      }
+                    ]);
+                  }}
                   className="btn btn-primary"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                   </svg>
-                  Add New Role
+                  Add Default Titles
                 </button>
               </div>
             </div>
@@ -318,7 +433,7 @@ const Step3Roles = () => {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-500 mr-2 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
-            Role management helps maintain security and workflow efficiency. You can customize roles and permissions anytime in your account settings.
+            Permission management helps maintain security and workflow efficiency. You can customize permissions for each title anytime in your account settings.
           </p>
         </div>
       </motion.div>

@@ -1,28 +1,35 @@
-// src/components/auth/ResetPassword.js
+// src/components/auth/ResetPasswordConfirm.js
 
 import React, { useState, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { motion } from 'framer-motion';
 import { AuthContext } from '../../context/AuthContext';
 
 const validationSchema = Yup.object({
-  email: Yup.string().email('Invalid email address').required('Email is required'),
+  password: Yup.string()
+    .min(8, 'Password must be at least 8 characters')
+    .required('Password is required'),
+  confirmPassword: Yup.string()
+    .oneOf([Yup.ref('password'), null], 'Passwords must match')
+    .required('Confirm password is required'),
 });
 
-const ResetPassword = () => {
-  const { resetPassword } = useContext(AuthContext);
-  const [requestSent, setRequestSent] = useState(false);
+const ResetPasswordConfirm = () => {
+  const { confirmPasswordReset } = useContext(AuthContext);
+  const { uid, token } = useParams();
+  const navigate = useNavigate();
+  const [resetComplete, setResetComplete] = useState(false);
   const [apiError, setApiError] = useState(null);
 
   const handleSubmit = async (values, { setSubmitting }) => {
     try {
       setApiError(null);
-      await resetPassword(values.email);
-      setRequestSent(true);
+      await confirmPasswordReset(uid, token, values.password);
+      setResetComplete(true);
     } catch (error) {
-      setApiError(error.message || 'An error occurred. Please try again.');
+      setApiError(error.message || 'Failed to reset password. Please try again or request a new reset link.');
     } finally {
       setSubmitting(false);
     }
@@ -42,10 +49,10 @@ const ResetPassword = () => {
           </h2>
         </Link>
         <h2 className="mt-6 text-center text-3xl font-bold text-secondary-900">
-          Reset your password
+          Set new password
         </h2>
         <p className="mt-2 text-center text-sm text-secondary-600">
-          Enter your email address and we'll send you a link to reset your password.
+          Enter your new password below
         </p>
       </motion.div>
 
@@ -56,21 +63,21 @@ const ResetPassword = () => {
         transition={{ duration: 0.5, delay: 0.2 }}
       >
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {requestSent ? (
+          {resetComplete ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="text-center py-6"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-success-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <h3 className="text-lg font-medium text-secondary-900 mb-2">Check your email</h3>
+              <h3 className="text-lg font-medium text-secondary-900 mb-2">Password reset successful</h3>
               <p className="text-secondary-600 mb-6">
-                We've sent a password reset link to your email address. Please check your inbox and follow the link to reset your password.
+                Your password has been changed successfully. You can now sign in with your new password.
               </p>
               <Link to="/signin" className="btn btn-primary">
-                Return to Sign In
+                Sign In
               </Link>
             </motion.div>
           ) : (
@@ -83,7 +90,8 @@ const ResetPassword = () => {
 
               <Formik
                 initialValues={{
-                  email: '',
+                  password: '',
+                  confirmPassword: '',
                 }}
                 validationSchema={validationSchema}
                 onSubmit={handleSubmit}
@@ -91,17 +99,31 @@ const ResetPassword = () => {
                 {({ isSubmitting, errors, touched }) => (
                   <Form className="space-y-6">
                     <div>
-                      <label htmlFor="email" className="label">
-                        Email address
+                      <label htmlFor="password" className="label">
+                        New Password
                       </label>
                       <Field
-                        id="email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        className={`input ${errors.email && touched.email ? 'border-danger-500' : ''}`}
+                        id="password"
+                        name="password"
+                        type="password"
+                        autoComplete="new-password"
+                        className={`input ${errors.password && touched.password ? 'border-danger-500' : ''}`}
                       />
-                      <ErrorMessage name="email" component="div" className="mt-1 text-sm text-danger-600" />
+                      <ErrorMessage name="password" component="div" className="mt-1 text-sm text-danger-600" />
+                    </div>
+
+                    <div>
+                      <label htmlFor="confirmPassword" className="label">
+                        Confirm New Password
+                      </label>
+                      <Field
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type="password"
+                        autoComplete="new-password"
+                        className={`input ${errors.confirmPassword && touched.confirmPassword ? 'border-danger-500' : ''}`}
+                      />
+                      <ErrorMessage name="confirmPassword" component="div" className="mt-1 text-sm text-danger-600" />
                     </div>
 
                     <div>
@@ -110,7 +132,7 @@ const ResetPassword = () => {
                         disabled={isSubmitting}
                         className="btn btn-primary w-full py-3"
                       >
-                        {isSubmitting ? 'Sending reset link...' : 'Send reset link'}
+                        {isSubmitting ? 'Setting new password...' : 'Set new password'}
                       </button>
                     </div>
                   </Form>
@@ -130,4 +152,4 @@ const ResetPassword = () => {
   );
 };
 
-export default ResetPassword;
+export default ResetPasswordConfirm;

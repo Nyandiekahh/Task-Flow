@@ -1,3 +1,5 @@
+// src/components/auth/SignIn.js
+
 import React, { useState, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
@@ -20,6 +22,10 @@ const SignIn = () => {
     try {
       setApiError(null);
       await signIn(values.email, values.password);
+      
+      // If remember me is checked, we could set a longer token expiry
+      // This would require backend changes
+      
       navigate('/dashboard');
     } catch (error) {
       setApiError(error.message || 'Invalid email or password. Please try again.');

@@ -1,4 +1,7 @@
+// src/context/AuthContext.js
+
 import React, { createContext, useState, useEffect } from 'react';
+import { authAPI } from '../services/api';
 
 export const AuthContext = createContext();
 
@@ -6,99 +9,108 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Check if user is already logged in (from localStorage)
+  
+  // Check if user is logged in on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('taskflow_user');
-    if (storedUser) {
+    const checkLoggedIn = async () => {
       try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Error parsing stored user:', e);
-        localStorage.removeItem('taskflow_user');
+        const token = localStorage.getItem('accessToken');
+        
+        if (token) {
+          const user = await authAPI.getCurrentUser();
+          setCurrentUser(user);
+        }
+      } catch (error) {
+        console.error("Authentication error:", error);
+        // If token is invalid, clear it
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    };
+    
+    checkLoggedIn();
   }, []);
-
-  // For a real app, you would connect to your backend here
+  
+  // Sign up
   const signUp = async (email, password, name) => {
+    setError(null);
     try {
-      setLoading(true);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Create user object (in a real app, this would come from your backend)
-      const newUser = {
-        id: `user_${Date.now()}`,
+      const response = await authAPI.register({
         email,
-        name,
-        role: 'admin',
-        createdAt: new Date().toISOString(),
-      };
+        password,
+        confirm_password: password,
+        name
+      });
       
-      setCurrentUser(newUser);
-      localStorage.setItem('taskflow_user', JSON.stringify(newUser));
-      setLoading(false);
-      return newUser;
-    } catch (err) {
-      setError(err.message || 'An error occurred during sign up');
-      setLoading(false);
-      throw err;
+      // If registration is successful, login the user
+      if (response.user) {
+        // Store tokens
+        localStorage.setItem('accessToken', response.access);
+        localStorage.setItem('refreshToken', response.refresh);
+        
+        // Set current user
+        setCurrentUser(response.user);
+      }
+      
+      return response;
+    } catch (error) {
+      setError(error.message);
+      throw error;
     }
   };
-
+  
+  // Sign in
   const signIn = async (email, password) => {
+    setError(null);
     try {
-      setLoading(true);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await authAPI.login(email, password);
       
-      // Simulate successful login (in a real app, validate credentials with your backend)
-      const user = {
-        id: `user_${Date.now()}`,
-        email,
-        name: 'Demo User',
-        role: 'admin',
-        createdAt: new Date().toISOString(),
-      };
+      // Get user data
+      const userData = await authAPI.getCurrentUser();
+      setCurrentUser(userData);
       
-      setCurrentUser(user);
-      localStorage.setItem('taskflow_user', JSON.stringify(user));
-      setLoading(false);
-      return user;
-    } catch (err) {
-      setError(err.message || 'An error occurred during sign in');
-      setLoading(false);
-      throw err;
+      return userData;
+    } catch (error) {
+      setError(error.message);
+      throw error;
     }
   };
-
-  const signOut = async () => {
-    try {
-      // In a real app, you would call your backend to invalidate the session
-      setCurrentUser(null);
-      localStorage.removeItem('taskflow_user');
-    } catch (err) {
-      setError(err.message || 'An error occurred during sign out');
-      throw err;
-    }
+  
+  // Sign out
+  const signOut = () => {
+    authAPI.logout();
+    setCurrentUser(null);
   };
-
+  
+  // Reset password
   const resetPassword = async (email) => {
+    setError(null);
     try {
-      setLoading(true);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setLoading(false);
-      return true;
-    } catch (err) {
-      setError(err.message || 'An error occurred while resetting password');
-      setLoading(false);
-      throw err;
+      return await authAPI.requestPasswordReset(email);
+    } catch (error) {
+      setError(error.message);
+      throw error;
     }
   };
-
+  
+  // Confirm password reset
+  const confirmPasswordReset = async (uid, token, newPassword) => {
+    setError(null);
+    try {
+      return await authAPI.confirmPasswordReset(uid, token, newPassword);
+    } catch (error) {
+      setError(error.message);
+      throw error;
+    }
+  };
+  
+  // Update user profile
+  const updateProfile = async (userData) => {
+    // Implementation will be added later when we create the profile endpoint
+  };
+  
   const value = {
     currentUser,
     loading,
@@ -107,7 +119,9 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     resetPassword,
+    confirmPasswordReset,
+    updateProfile
   };
-
+  
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

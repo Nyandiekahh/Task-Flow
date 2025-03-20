@@ -1,4 +1,4 @@
-import React, { createContext, useState, useCallback } from 'react';
+import React, { createContext, useState, useCallback, useEffect } from 'react';
 
 export const OnboardingContext = createContext();
 
@@ -12,34 +12,27 @@ export const OnboardingProvider = ({ children }) => {
       logo: null,
     },
     teamMembers: [],
-    roles: [
-      { 
-        id: 'role_1',
-        name: 'Admin',
-        description: 'Full access to all settings and features',
-        permissions: ['create_tasks', 'assign_tasks', 'approve_tasks', 'delete_tasks', 'manage_users', 'manage_roles']
-      },
-      { 
-        id: 'role_2',
-        name: 'Manager',
-        description: 'Can create and assign tasks to team members',
-        permissions: ['create_tasks', 'assign_tasks', 'approve_tasks', 'view_reports']
-      },
-      { 
-        id: 'role_3',
-        name: 'Reviewer',
-        description: 'Can review and approve/reject tasks',
-        permissions: ['view_tasks', 'approve_tasks', 'reject_tasks', 'comment']
-      },
-      { 
-        id: 'role_4',
-        name: 'Team Member',
-        description: 'Can view and complete assigned tasks',
-        permissions: ['view_tasks', 'update_tasks', 'comment']
-      }
-    ],
+    roles: [], // Start with empty roles, will be created by admin
     completed: false,
   });
+
+  // Load onboarding data from localStorage if it exists
+  useEffect(() => {
+    const savedData = localStorage.getItem('taskflow_onboarding_progress');
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        setOnboardingData(parsedData);
+      } catch (e) {
+        console.error('Error loading onboarding data:', e);
+      }
+    }
+  }, []);
+
+  // Save onboarding progress to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('taskflow_onboarding_progress', JSON.stringify(onboardingData));
+  }, [onboardingData]);
 
   const updateOrganizationData = useCallback((data) => {
     setOnboardingData(prev => ({
@@ -105,25 +98,62 @@ export const OnboardingProvider = ({ children }) => {
     }));
   }, []);
 
+  // Use a memoized version of the current data to avoid the dependency cycle
   const completeOnboarding = useCallback(() => {
-    setOnboardingData(prev => ({
-      ...prev,
-      completed: true
-    }));
-    
-    // In a real app, you would save all this data to your backend
-    localStorage.setItem('taskflow_onboarding', JSON.stringify({
-      ...onboardingData,
-      completed: true
-    }));
-  }, [onboardingData]);
+    setOnboardingData(prev => {
+      const completedData = {
+        ...prev,
+        completed: true
+      };
+      // Save the completed data to localStorage
+      localStorage.setItem('taskflow_onboarding', JSON.stringify(completedData));
+      return completedData;
+    });
+  }, []);
 
   const nextStep = useCallback(() => {
-    setCurrentStep(prev => prev + 1);
+    setCurrentStep(prev => {
+      const nextStepValue = prev + 1;
+      // Save current step to localStorage
+      localStorage.setItem('taskflow_onboarding_step', nextStepValue);
+      return nextStepValue;
+    });
   }, []);
 
   const prevStep = useCallback(() => {
-    setCurrentStep(prev => prev - 1);
+    setCurrentStep(prev => {
+      const prevStepValue = prev - 1;
+      // Save current step to localStorage
+      localStorage.setItem('taskflow_onboarding_step', prevStepValue);
+      return prevStepValue;
+    });
+  }, []);
+
+  // Load current step from localStorage if it exists
+  useEffect(() => {
+    const savedStep = localStorage.getItem('taskflow_onboarding_step');
+    if (savedStep) {
+      setCurrentStep(parseInt(savedStep, 10));
+    }
+  }, []);
+
+  // Add a function to reset onboarding for testing
+  const resetOnboarding = useCallback(() => {
+    localStorage.removeItem('taskflow_onboarding');
+    localStorage.removeItem('taskflow_onboarding_progress');
+    localStorage.removeItem('taskflow_onboarding_step');
+    setCurrentStep(1);
+    setOnboardingData({
+      organization: {
+        name: '',
+        industry: '',
+        size: '',
+        logo: null,
+      },
+      teamMembers: [],
+      roles: [],
+      completed: false,
+    });
   }, []);
 
   const value = {
@@ -139,6 +169,7 @@ export const OnboardingProvider = ({ children }) => {
     completeOnboarding,
     nextStep,
     prevStep,
+    resetOnboarding,
   };
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

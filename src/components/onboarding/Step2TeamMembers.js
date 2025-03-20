@@ -4,15 +4,24 @@ import * as Yup from 'yup';
 import { motion, AnimatePresence } from 'framer-motion';
 import { OnboardingContext } from '../../context/OnboardingContext';
 
-const validationSchema = Yup.object({
+const memberValidationSchema = Yup.object({
   name: Yup.string().required('Name is required'),
   email: Yup.string().email('Invalid email address').required('Email is required'),
-  role: Yup.string().required('Role is required')
+  title: Yup.string().required('Title is required')
 });
 
 const Step2TeamMembers = () => {
   const { onboardingData, addTeamMember, removeTeamMember } = useContext(OnboardingContext);
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [customTitle, setCustomTitle] = useState('');
+  const [titles, setTitles] = useState(['Admin']); // Initialize with Admin
+
+  const handleAddTitle = () => {
+    if (customTitle && !titles.includes(customTitle)) {
+      setTitles(prev => [...prev, customTitle]);
+      setCustomTitle('');
+    }
+  };
 
   const handleAddMember = (values, { resetForm }) => {
     addTeamMember(values);
@@ -32,6 +41,56 @@ const Step2TeamMembers = () => {
           Add the people you work with to collaborate on tasks and projects. You can always invite more team members later.
         </p>
 
+        {/* Title Management Section */}
+        <div className="mb-8 bg-secondary-50 rounded-lg p-4 border border-secondary-200">
+          <h3 className="text-lg font-medium text-secondary-900 mb-4">Team Titles</h3>
+          <p className="text-secondary-600 mb-4">
+            Create titles for your team members based on your organization's structure. You'll assign permissions to these titles in the next step.
+          </p>
+          
+          <div className="flex flex-wrap gap-2 mb-4">
+            {titles.map((title, index) => (
+              <div 
+                key={index} 
+                className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full flex items-center"
+              >
+                <span className="mr-2">{title}</span>
+                {title !== 'Admin' && (
+                  <button 
+                    type="button" 
+                    onClick={() => setTitles(prev => prev.filter(t => t !== title))}
+                    className="text-primary-600 hover:text-primary-800"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          <div className="flex">
+            <input
+              type="text"
+              className="input mr-2"
+              placeholder="New title (e.g. Manager, Developer)"
+              value={customTitle}
+              onChange={(e) => setCustomTitle(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddTitle()}
+            />
+            <button
+              type="button"
+              onClick={handleAddTitle}
+              className="btn btn-primary"
+              disabled={!customTitle || titles.includes(customTitle)}
+            >
+              Add Title
+            </button>
+          </div>
+        </div>
+
+        {/* Team Members Section */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-secondary-900">Team Members</h3>
@@ -74,9 +133,9 @@ const Step2TeamMembers = () => {
                   initialValues={{
                     name: '',
                     email: '',
-                    role: ''
+                    title: ''
                   }}
-                  validationSchema={validationSchema}
+                  validationSchema={memberValidationSchema}
                   onSubmit={handleAddMember}
                 >
                   {({ isSubmitting, errors, touched }) => (
@@ -110,23 +169,23 @@ const Step2TeamMembers = () => {
                       </div>
 
                       <div>
-                        <label htmlFor="role" className="label">
-                          Role
+                        <label htmlFor="title" className="label">
+                          Title
                         </label>
                         <Field
                           as="select"
-                          id="role"
-                          name="role"
-                          className={`input ${errors.role && touched.role ? 'border-danger-500' : ''}`}
+                          id="title"
+                          name="title"
+                          className={`input ${errors.title && touched.title ? 'border-danger-500' : ''}`}
                         >
-                          <option value="">Select a role</option>
-                          {onboardingData.roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {role.name}
+                          <option value="">Select a title</option>
+                          {titles.map((title, index) => (
+                            <option key={index} value={title}>
+                              {title}
                             </option>
                           ))}
                         </Field>
-                        <ErrorMessage name="role" component="div" className="mt-1 text-sm text-danger-600" />
+                        <ErrorMessage name="title" component="div" className="mt-1 text-sm text-danger-600" />
                       </div>
 
                       <div className="md:col-span-3 flex justify-end mt-4">
@@ -164,7 +223,7 @@ const Step2TeamMembers = () => {
                       Email
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">
-                      Role
+                      Title
                     </th>
                     <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-secondary-500 uppercase tracking-wider">
                       Actions
@@ -172,47 +231,44 @@ const Step2TeamMembers = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-secondary-200">
-                  {onboardingData.teamMembers.map((member) => {
-                    const role = onboardingData.roles.find(r => r.id === member.role);
-                    return (
-                      <motion.tr 
-                        key={member.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="h-10 w-10 flex-shrink-0 rounded-full bg-primary-100 flex items-center justify-center">
-                              <span className="text-primary-700 font-medium">
-                                {member.name.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-secondary-900">{member.name}</div>
-                            </div>
+                  {onboardingData.teamMembers.map((member) => (
+                    <motion.tr 
+                      key={member.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 flex-shrink-0 rounded-full bg-primary-100 flex items-center justify-center">
+                            <span className="text-primary-700 font-medium">
+                              {member.name.charAt(0).toUpperCase()}
+                            </span>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-secondary-600">{member.email}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 text-primary-800">
-                            {role?.name || 'Unknown Role'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            type="button"
-                            onClick={() => removeTeamMember(member.id)}
-                            className="text-danger-600 hover:text-danger-900"
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-secondary-900">{member.name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-secondary-600">{member.email}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-primary-100 text-primary-800">
+                          {member.title}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          type="button"
+                          onClick={() => removeTeamMember(member.id)}
+                          className="text-danger-600 hover:text-danger-900"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -257,7 +313,8 @@ const Step2TeamMembers = () => {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-500 mr-2 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
-            You can add more team members and adjust their roles at any time after setup.
+            You can add more team members and adjust their titles at any time after setup.
+            In the next step, you'll define permissions for each title.
           </p>
         </div>
       </motion.div>
