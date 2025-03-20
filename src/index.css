@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  @apply bg-white text-secondary-800;
+}
+
+@layer components {
+  .btn {
+    @apply px-6 py-2.5 rounded-md font-medium transition-all duration-200 inline-flex items-center justify-center;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700 shadow-sm;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary-100 text-secondary-800 hover:bg-secondary-200;
+  }
+  
+  .btn-success {
+    @apply bg-success-500 text-white hover:bg-success-700;
+  }
+  
+  .btn-danger {
+    @apply bg-danger-500 text-white hover:bg-danger-700;
+  }
+  
+  .input {
+    @apply w-full px-4 py-2.5 border border-secondary-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+  
+  .label {
+    @apply block mb-2 text-sm font-medium text-secondary-700;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl p-6 shadow-card hover:shadow-cardHover transition-shadow duration-300;
+  }
+  
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .section {
+    @apply py-16 md:py-24;
+  }
+  
+  .fade-in {
+    @apply animate-fade;
+  }
+  
+  .slide-in {
+    @apply animate-slide;
+  }
+}
