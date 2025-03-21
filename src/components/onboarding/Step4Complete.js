@@ -1,29 +1,75 @@
-import React, { useContext, useEffect } from 'react';
+// src/components/onboarding/Step4Complete.js
+
+import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { OnboardingContext } from '../../context/OnboardingContext';
 import { AuthContext } from '../../context/AuthContext';
+import { onboardingAPI } from '../../services/api';
 
 const Step4Complete = () => {
-  const { onboardingData } = useContext(OnboardingContext);
+  const { onboardingData, completeOnboarding } = useContext(OnboardingContext);
   const { currentUser } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [summary, setSummary] = useState(null);
 
-  // The problem is likely here - we're calling completeOnboarding in useEffect
-  // but not including it in the dependency array, or it's changing on every render
-  // Let's modify this to avoid the infinite loop
-  
-  // We'll use a ref to ensure this only runs once
+  // We'll use a ref to ensure onboarding completion only runs once
   const hasCompletedRef = React.useRef(false);
-  const { completeOnboarding } = useContext(OnboardingContext);
   
+  // Fetch the latest data from the backend
   useEffect(() => {
-    // Only run this once
-    if (!hasCompletedRef.current) {
-      completeOnboarding();
-      hasCompletedRef.current = true;
-    }
+    const fetchOnboardingData = async () => {
+      try {
+        setLoading(true);
+        const data = await onboardingAPI.getOnboardingData();
+        
+        // Build a summary object
+        setSummary({
+          organization: data.organization || {},
+          teamMembersCount: (data.teamMembers || []).length + 1, // +1 for the admin
+          rolesCount: (data.roles || []).length,
+          titlesCount: (data.titles || []).length
+        });
+
+        // After fetching data, mark the onboarding as complete if not already done
+        if (!hasCompletedRef.current && !data.completed) {
+          await completeOnboarding();
+          hasCompletedRef.current = true;
+        }
+      } catch (err) {
+        console.error('Error fetching onboarding data:', err);
+        setError('Failed to load onboarding summary. ' + err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchOnboardingData();
   }, [completeOnboarding]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-danger-50 border-l-4 border-danger-500 text-danger-700 p-4 my-4 rounded">
+        <p>{error}</p>
+        <button 
+          onClick={() => navigate('/dashboard')}
+          className="mt-4 btn btn-primary"
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="text-center py-8">
@@ -49,31 +95,33 @@ const Step4Complete = () => {
           Your TaskFlow workspace has been successfully set up. You're ready to start managing tasks and collaborating with your team.
         </p>
 
-        <div className="bg-white rounded-xl p-6 shadow-md border border-secondary-100 mb-8">
-          <h3 className="text-xl font-semibold text-secondary-900 mb-4">Your Workspace Summary</h3>
-          
-          <div className="grid grid-cols-2 gap-4 text-left">
-            <div>
-              <p className="text-sm text-secondary-500">Organization</p>
-              <p className="font-medium text-secondary-900">{onboardingData.organization.name}</p>
-            </div>
+        {summary && (
+          <div className="bg-white rounded-xl p-6 shadow-md border border-secondary-100 mb-8">
+            <h3 className="text-xl font-semibold text-secondary-900 mb-4">Your Workspace Summary</h3>
             
-            <div>
-              <p className="text-sm text-secondary-500">Industry</p>
-              <p className="font-medium text-secondary-900">{onboardingData.organization.industry}</p>
-            </div>
-            
-            <div>
-              <p className="text-sm text-secondary-500">Team Size</p>
-              <p className="font-medium text-secondary-900">{onboardingData.teamMembers.length + 1} members</p>
-            </div>
-            
-            <div>
-              <p className="text-sm text-secondary-500">Roles</p>
-              <p className="font-medium text-secondary-900">{onboardingData.roles.length} roles configured</p>
+            <div className="grid grid-cols-2 gap-4 text-left">
+              <div>
+                <p className="text-sm text-secondary-500">Organization</p>
+                <p className="font-medium text-secondary-900">{summary.organization.name}</p>
+              </div>
+              
+              <div>
+                <p className="text-sm text-secondary-500">Industry</p>
+                <p className="font-medium text-secondary-900">{summary.organization.industry}</p>
+              </div>
+              
+              <div>
+                <p className="text-sm text-secondary-500">Team Size</p>
+                <p className="font-medium text-secondary-900">{summary.teamMembersCount} members</p>
+              </div>
+              
+              <div>
+                <p className="text-sm text-secondary-500">Roles</p>
+                <p className="font-medium text-secondary-900">{summary.rolesCount} roles configured</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <h3 className="text-xl font-semibold text-secondary-900 mb-4">What's Next?</h3>
         

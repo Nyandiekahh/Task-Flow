@@ -28,6 +28,8 @@ const SignUp = () => {
     try {
       setApiError(null);
       await signUp(values.email, values.password, values.name);
+      
+      // After successful registration and login, navigate to the first onboarding step
       navigate('/onboarding/org-details');
     } catch (error) {
       setApiError(error.message || 'An error occurred during sign up. Please try again.');

@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { motion } from 'framer-motion';
@@ -38,11 +38,26 @@ const sizeOptions = [
 
 const Step1OrgDetails = () => {
   const { onboardingData, updateOrganizationData } = useContext(OnboardingContext);
+  const [error, setError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const handleSubmit = (values) => {
-    updateOrganizationData(values);
-    // Note: Navigation happens in the parent OnboardingLayout component
+  const handleSubmit = async (values, { setSubmitting }) => {
+    try {
+      setIsSubmitting(true);
+      setError(null);
+      await updateOrganizationData(values);
+      // Note: Navigation happens in the parent OnboardingLayout component
+    } catch (err) {
+      setError(err.message || 'Failed to create organization');
+      console.error('Error creating organization:', err);
+    } finally {
+      setIsSubmitting(false);
+      setSubmitting(false);
+    }
   };
+
+  // Ensure organization is always an object to prevent null/undefined errors
+  const organization = onboardingData.organization || {};
 
   return (
     <div>
@@ -56,17 +71,24 @@ const Step1OrgDetails = () => {
           This information helps us customize your experience and set up your workspace.
         </p>
 
+        {/* Display errors if any */}
+        {error && (
+          <div className="mb-6 bg-danger-50 border-l-4 border-danger-500 text-danger-700 p-4 rounded">
+            <p>{error}</p>
+          </div>
+        )}
+
         <Formik
           initialValues={{
-            name: onboardingData.organization.name || '',
-            industry: onboardingData.organization.industry || '',
-            size: onboardingData.organization.size || '',
-            logo: onboardingData.organization.logo || null
+            name: organization.name || '',
+            industry: organization.industry || '',
+            size: organization.size || '',
+            logo: organization.logo || null
           }}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ isSubmitting, errors, touched, setFieldValue }) => (
+          {({ isSubmitting: formikSubmitting, errors, touched, setFieldValue }) => (
             <Form className="space-y-6">
               <div>
                 <label htmlFor="name" className="label">
@@ -128,9 +150,13 @@ const Step1OrgDetails = () => {
                 </label>
                 <div className="flex items-center space-x-6">
                   <div className="w-20 h-20 bg-secondary-100 rounded-lg flex items-center justify-center border border-secondary-200">
-                    {onboardingData.organization.logo ? (
+                    {organization.logo ? (
                       <img
-                        src={URL.createObjectURL(onboardingData.organization.logo)}
+                        src={
+                          typeof organization.logo === 'string' 
+                            ? organization.logo 
+                            : URL.createObjectURL(organization.logo)
+                        }
                         alt="Organization logo"
                         className="max-h-full max-w-full"
                       />
@@ -150,7 +176,9 @@ const Step1OrgDetails = () => {
                       className="hidden"
                       onChange={(event) => {
                         const file = event.currentTarget.files[0];
-                        setFieldValue('logo', file);
+                        if (file) {
+                          setFieldValue('logo', file);
+                        }
                       }}
                     />
                     <label
@@ -164,6 +192,16 @@ const Step1OrgDetails = () => {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              <div className="pt-4">
+                <button 
+                  type="submit" 
+                  className="btn btn-primary w-full"
+                  disabled={isSubmitting || formikSubmitting}
+                >
+                  {isSubmitting || formikSubmitting ? 'Saving...' : 'Save Organization Details'}
+                </button>
               </div>
             </Form>
           )}
