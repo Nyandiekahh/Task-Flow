@@ -5,7 +5,7 @@ import { organizationAPI } from '../../services/api';
 import axios from 'axios';
 
 const DashboardHome = () => {
-  const { currentUser, token } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [organization, setOrganization] = useState(null);
@@ -95,6 +95,8 @@ const DashboardHome = () => {
         
         // Fetch task data from the API
         const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        // Getting token directly from localStorage since we're using the API interceptor
+        const token = localStorage.getItem('token');
         const headers = {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -144,10 +146,12 @@ const DashboardHome = () => {
       }
     };
 
+    // Get the token from localStorage
+    const token = localStorage.getItem('token');
     if (token) {
       fetchData();
     }
-  }, [token]);
+  }, []);
 
   // Handle loading state
   if (loading) {

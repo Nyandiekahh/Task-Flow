@@ -1,105 +1,85 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../../context/AuthContext';
+import axios from 'axios';
 
 const Team = () => {
-  // Mock team members data
-  const initialTeamMembers = [
-    { 
-      id: 1, 
-      name: 'John Doe', 
-      email: 'john.doe@example.com', 
-      role: 'Admin',
-      department: 'Management',
-      avatar: 'JD',
-      status: 'Active',
-      joinedDate: '2024-10-10',
-      tasksAssigned: 8,
-      tasksCompleted: 5
-    },
-    { 
-      id: 2, 
-      name: 'Sarah Johnson', 
-      email: 'sarah.johnson@example.com', 
-      role: 'Manager',
-      department: 'Marketing',
-      avatar: 'SJ',
-      status: 'Active',
-      joinedDate: '2024-10-12',
-      tasksAssigned: 12,
-      tasksCompleted: 7
-    },
-    { 
-      id: 3, 
-      name: 'Michael Chen', 
-      email: 'michael.chen@example.com', 
-      role: 'Team Member',
-      department: 'Development',
-      avatar: 'MC',
-      status: 'Active',
-      joinedDate: '2024-11-01',
-      tasksAssigned: 15,
-      tasksCompleted: 10
-    },
-    { 
-      id: 4, 
-      name: 'Emily Rodriguez', 
-      email: 'emily.rodriguez@example.com', 
-      role: 'Reviewer',
-      department: 'Product',
-      avatar: 'ER',
-      status: 'Active',
-      joinedDate: '2024-11-05',
-      tasksAssigned: 9,
-      tasksCompleted: 8
-    },
-    { 
-      id: 5, 
-      name: 'Alex Kim', 
-      email: 'alex.kim@example.com', 
-      role: 'Team Member',
-      department: 'Design',
-      avatar: 'AK',
-      status: 'Away',
-      joinedDate: '2024-11-15',
-      tasksAssigned: 7,
-      tasksCompleted: 3
-    },
-    { 
-      id: 6, 
-      name: 'Lisa Wang', 
-      email: 'lisa.wang@example.com', 
-      role: 'Manager',
-      department: 'Sales',
-      avatar: 'LW',
-      status: 'Inactive',
-      joinedDate: '2024-12-01',
-      tasksAssigned: 0,
-      tasksCompleted: 0
-    },
-  ];
+  const { token } = useContext(AuthContext);
   
   // State for team members and filter/search
-  const [teamMembers] = useState(initialTeamMembers);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('All');
-  const [filterDepartment, setFilterDepartment] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [roles, setRoles] = useState(['All']);
   
-  // Extract unique roles and departments for filter dropdowns
-  const roles = ['All', ...new Set(teamMembers.map(member => member.role))];
-  const departments = ['All', ...new Set(teamMembers.map(member => member.department))];
-  const statuses = ['All', 'Active', 'Away', 'Inactive'];
+  // Fetch team members
+  useEffect(() => {
+    const fetchTeamMembers = async () => {
+      try {
+        setLoading(true);
+        
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+        
+        // Get team members
+        const response = await axios.get(`${API_URL}/team-members/`, { headers });
+        
+        // Get roles for filter options
+        try {
+          const rolesResponse = await axios.get(`${API_URL}/roles/`, { headers });
+          const roleNames = ['All', ...new Set(rolesResponse.data.map(role => role.name))];
+          setRoles(roleNames);
+        } catch (rolesError) {
+          console.error("Failed to load roles:", rolesError);
+        }
+        
+        // Transform data to include needed fields
+        const transformedMembers = response.data.map(member => ({
+          ...member,
+          status: member.user ? 'Active' : 'Pending',
+          joinedDate: member.created_at,
+          avatar: member.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
+          // We'd need backend APIs for these, using placeholders for now
+          tasksAssigned: 0,
+          tasksCompleted: 0
+        }));
+        
+        setTeamMembers(transformedMembers);
+        setError(null);
+        
+      } catch (err) {
+        console.error('Error fetching team members:', err);
+        setError('Failed to load team members. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (token) {
+      fetchTeamMembers();
+    }
+  }, [token]);
+  
+  // Define statuses
+  const statuses = ['All', 'Active', 'Pending'];
   
   // Filter team members based on filters and search
   const filteredMembers = teamMembers.filter(member => {
-    const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          member.department.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = filterRole === 'All' || member.role === filterRole;
-    const matchesDepartment = filterDepartment === 'All' || member.department === filterDepartment;
+    const matchesSearch = 
+      member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (member.title && member.title.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesRole = filterRole === 'All' || member.title === filterRole;
     const matchesStatus = filterStatus === 'All' || member.status === filterStatus;
     
-    return matchesSearch && matchesRole && matchesDepartment && matchesStatus;
+    return matchesSearch && matchesRole && matchesStatus;
   });
   
   // Helper function to get status color
@@ -107,10 +87,8 @@ const Team = () => {
     switch (status) {
       case 'Active':
         return 'bg-green-100 text-green-800';
-      case 'Away':
+      case 'Pending':
         return 'bg-yellow-100 text-yellow-800';
-      case 'Inactive':
-        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -155,81 +133,96 @@ const Team = () => {
           </div>
         </div>
         
-        {/* Filters and controls */}
-        <div className="mb-6 space-y-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="relative grow">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+        {/* Loading state */}
+        {loading && (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+          </div>
+        )}
+        
+        {/* Error state */}
+        {error && (
+          <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
               </div>
-              <input
-                type="text"
-                className="input pl-10 w-full"
-                placeholder="Search team members..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 border ${viewMode === 'grid' ? 'bg-primary-100 border-primary-200 text-primary-800' : 'border-gray-200 text-gray-600'} rounded-md flex items-center`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-                Grid
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 border ${viewMode === 'list' ? 'bg-primary-100 border-primary-200 text-primary-800' : 'border-gray-200 text-gray-600'} rounded-md flex items-center`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                </svg>
-                List
-              </button>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
             </div>
           </div>
-          
-          <div className="flex flex-wrap gap-4">
-            <select 
-              className="input" 
-              value={filterRole} 
-              onChange={(e) => setFilterRole(e.target.value)}
-            >
-              {roles.map((role, index) => (
-                <option key={index} value={role}>{role} Roles</option>
-              ))}
-            </select>
+        )}
+        
+        {/* Filters and controls */}
+        {!loading && !error && (
+          <div className="mb-6 space-y-4">
+            <div className="flex flex-wrap gap-4">
+              <div className="relative grow">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                  <svg className="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  className="input pl-10 w-full"
+                  placeholder="Search team members..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-3 py-1.5 border ${viewMode === 'grid' ? 'bg-primary-100 border-primary-200 text-primary-800' : 'border-gray-200 text-gray-600'} rounded-md flex items-center`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                  Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 border ${viewMode === 'list' ? 'bg-primary-100 border-primary-200 text-primary-800' : 'border-gray-200 text-gray-600'} rounded-md flex items-center`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                  </svg>
+                  List
+                </button>
+              </div>
+            </div>
             
-            <select 
-              className="input" 
-              value={filterDepartment} 
-              onChange={(e) => setFilterDepartment(e.target.value)}
-            >
-              {departments.map((department, index) => (
-                <option key={index} value={department}>{department} Department</option>
-              ))}
-            </select>
-            
-            <select 
-              className="input" 
-              value={filterStatus} 
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              {statuses.map((status, index) => (
-                <option key={index} value={status}>{status} Status</option>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-4">
+              <select 
+                className="input" 
+                value={filterRole} 
+                onChange={(e) => setFilterRole(e.target.value)}
+              >
+                {roles.map((role, index) => (
+                  <option key={index} value={role}>{role === 'All' ? 'All Roles' : role}</option>
+                ))}
+              </select>
+              
+              <select 
+                className="input" 
+                value={filterStatus} 
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                {statuses.map((status, index) => (
+                  <option key={index} value={status}>{status} Status</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
         
         {/* Team members - Grid view */}
-        {viewMode === 'grid' && (
+        {!loading && !error && viewMode === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredMembers.map(member => (
               <div key={member.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
@@ -240,8 +233,7 @@ const Team = () => {
                     </div>
                     <div className="ml-4">
                       <h3 className="text-lg font-medium text-gray-900">{member.name}</h3>
-                      <p className="text-sm text-gray-500">{member.role}</p>
-                      <p className="text-sm text-gray-500">{member.department}</p>
+                      <p className="text-sm text-gray-500">{member.title || 'No title'}</p>
                     </div>
                   </div>
                   
@@ -256,12 +248,6 @@ const Team = () => {
                       <span className="text-gray-500">Status:</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(member.status)}`}>
                         {member.status}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-500">Tasks:</span>
-                      <span className="text-gray-900">
-                        {member.tasksCompleted}/{member.tasksAssigned} completed
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
@@ -282,7 +268,7 @@ const Team = () => {
         )}
         
         {/* Team members - List view */}
-        {viewMode === 'list' && (
+        {!loading && !error && viewMode === 'list' && (
           <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -292,13 +278,10 @@ const Team = () => {
                       Member
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role / Department
+                      Role
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tasks
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Joined
@@ -323,16 +306,12 @@ const Team = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{member.role}</div>
-                        <div className="text-sm text-gray-500">{member.department}</div>
+                        <div className="text-sm text-gray-900">{member.title || 'No title'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(member.status)}`}>
                           {member.status}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.tasksCompleted}/{member.tasksAssigned} completed
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(member.joinedDate).toLocaleDateString()}
@@ -354,7 +333,7 @@ const Team = () => {
         )}
         
         {/* Empty state */}
-        {filteredMembers.length === 0 && (
+        {!loading && !error && filteredMembers.length === 0 && (
           <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -372,11 +351,11 @@ const Team = () => {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900">No team members found</h3>
             <p className="mt-1 text-sm text-gray-500">
-              {searchTerm || filterRole !== 'All' || filterDepartment !== 'All' || filterStatus !== 'All' 
+              {searchTerm || filterRole !== 'All' || filterStatus !== 'All' 
                 ? 'Try adjusting your search or filter criteria.'
                 : 'Get started by adding your first team member.'}
             </p>
-            {!searchTerm && filterRole === 'All' && filterDepartment === 'All' && filterStatus === 'All' && (
+            {!searchTerm && filterRole === 'All' && filterStatus === 'All' && (
               <div className="mt-6">
                 <button type="button" className="btn btn-primary">
                   <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -390,11 +369,11 @@ const Team = () => {
         )}
         
         {/* Team stats */}
-        {filteredMembers.length > 0 && (
+        {!loading && !error && teamMembers.length > 0 && (
           <div className="mt-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Team Statistics</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Team Overview</h3>
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-900">{teamMembers.length}</div>
                   <div className="text-sm text-gray-500 mt-1">Total Members</div>
@@ -407,15 +386,9 @@ const Team = () => {
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-900">
-                    {departments.length - 1}
+                    {roles.length > 0 ? roles.length - 1 : 0}
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">Departments</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-gray-900">
-                    {teamMembers.reduce((total, member) => total + member.tasksCompleted, 0)}
-                  </div>
-                  <div className="text-sm text-gray-500 mt-1">Tasks Completed</div>
+                  <div className="text-sm text-gray-500 mt-1">Different Roles</div>
                 </div>
               </div>
             </div>

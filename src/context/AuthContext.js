@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       try {
         // Check if we have a token
-        const token = localStorage.getItem('accessToken');
+        const token = localStorage.getItem('token');
         
         if (token) {
           // Get user data
@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }) => {
       } catch (error) {
         console.error('Authentication error:', error);
         // If token is invalid or expired, clear it
-        localStorage.removeItem('accessToken');
+        localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         setCurrentUser(null);
       } finally {
@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
       
       // Store tokens from registration response
       if (response.access) {
-        localStorage.setItem('accessToken', response.access);
+        localStorage.setItem('token', response.access);
       }
       if (response.refresh) {
         localStorage.setItem('refreshToken', response.refresh);
@@ -68,7 +68,15 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       // Get tokens
-      await authAPI.login(email, password);
+      const response = await authAPI.login(email, password);
+      
+      // Store tokens properly
+      if (response.access) {
+        localStorage.setItem('token', response.access);
+      }
+      if (response.refresh) {
+        localStorage.setItem('refreshToken', response.refresh);
+      }
       
       // Fetch user data
       const userData = await authAPI.getCurrentUser();
@@ -83,7 +91,8 @@ export const AuthProvider = ({ children }) => {
   
   // Sign out current user
   const signOut = useCallback(() => {
-    authAPI.logout();
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     setCurrentUser(null);
   }, []);
   

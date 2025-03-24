@@ -1,66 +1,99 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 const Tasks = () => {
-  // Sample tasks data
-  const initialTasks = [
-    { 
-      id: 't1', 
-      title: 'Update website content', 
-      description: 'Update the homepage content with the new messaging',
-      dueDate: '2025-03-25', 
-      status: 'In Progress', 
-      priority: 'High', 
-      assignee: 'You',
-      project: 'Website Redesign',
-      projectId: 'p1',
-      comments: 3,
-      created: '2025-03-15'
-    },
-    { 
-      id: 't2', 
-      title: 'Prepare quarterly report', 
-      description: 'Create a comprehensive Q1 performance report',
-      dueDate: '2025-03-28', 
-      status: 'Not Started', 
-      priority: 'Medium', 
-      assignee: 'Sarah Johnson',
-      project: 'Marketing Campaign',
-      projectId: 'p2',
-      comments: 0,
-      created: '2025-03-16'
-    },
-    { 
-      id: 't3', 
-      title: 'Review marketing materials', 
-      description: 'Review and approve the new marketing collateral',
-      dueDate: '2025-03-23', 
-      status: 'In Progress', 
-      priority: 'Low', 
-      assignee: 'Michael Chen',
-      project: 'Marketing Campaign',
-      projectId: 'p2',
-      comments: 7,
-      created: '2025-03-10'
-    }
-  ];
-  
-  const [tasks] = useState(initialTasks);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setLoading(true);
+        
+        // Get token directly from localStorage instead of from AuthContext
+        const token = localStorage.getItem('token');
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        
+        const response = await axios.get(`${API_URL}/tasks/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        setTasks(response.data);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching tasks:', err);
+        setError('Failed to load tasks. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Get token to check if authenticated
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchTasks();
+    }
+  }, []);
 
   // Helper to get status color
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Completed':
+      case 'completed':
+      case 'approved':
         return 'bg-green-100 text-green-800';
-      case 'In Progress':
+      case 'in_progress':
         return 'bg-yellow-100 text-yellow-800';
-      case 'Not Started':
+      case 'pending':
         return 'bg-gray-100 text-gray-800';
-      case 'Overdue':
+      case 'rejected':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Format status for display
+  const formatStatus = (status) => {
+    if (!status) return 'Unknown';
+    
+    if (status === 'in_progress') return 'In Progress';
+    
+    // Capitalize first letter of each word
+    return status.split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Delete task handler
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      // Get token directly from localStorage
+      const token = localStorage.getItem('token');
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      
+      await axios.delete(`${API_URL}/tasks/${taskId}/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Remove the deleted task from the state
+      setTasks(tasks.filter(task => task.id !== taskId));
+      
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      alert('Failed to delete task. Please try again.');
     }
   };
 
@@ -78,12 +111,14 @@ const Tasks = () => {
             </p>
           </div>
           <div className="mt-4 flex md:mt-0 md:ml-4">
-            <button type="button" className="btn btn-primary">
-              <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
-              New Task
-            </button>
+            <Link to="/dashboard/tasks/new">
+              <button type="button" className="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                New Task
+              </button>
+            </Link>
           </div>
         </div>
 
@@ -105,61 +140,143 @@ const Tasks = () => {
           </div>
         </div>
         
-        {/* Task list */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-8">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Task
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Project
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Due Date
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Assignee
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {tasks
-                  .filter(task => 
-                    task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    task.description.toLowerCase().includes(searchTerm.toLowerCase())
-                  )
-                  .map((task) => (
-                    <tr key={task.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{task.title}</div>
-                        <div className="text-xs text-gray-500 truncate max-w-xs">{task.description}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-blue-600">{task.project}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">{task.dueDate}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.status)}`}>
-                          {task.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {task.assignee}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+        {/* Loading state */}
+        {loading && (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
           </div>
-        </div>
+        )}
+        
+        {/* Error state */}
+        {error && (
+          <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Task list */}
+        {!loading && !error && tasks.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-8">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Task
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Due Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Priority
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Assignee
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {tasks
+                    .filter(task => 
+                      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()))
+                    )
+                    .map((task) => (
+                      <tr key={task.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            <Link to={`/dashboard/tasks/${task.id}`} className="hover:text-primary-600">
+                              {task.title}
+                            </Link>
+                          </div>
+                          <div className="text-xs text-gray-500 truncate max-w-xs">{task.description}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-500">
+                            {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No due date'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.status)}`}>
+                            {formatStatus(task.status)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : 'Medium'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {task.assigned_to_name || 'Unassigned'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <Link 
+                            to={`/dashboard/tasks/${task.id}/edit`} 
+                            className="text-primary-600 hover:text-primary-900 mr-3"
+                          >
+                            Edit
+                          </Link>
+                          <button 
+                            className="text-red-600 hover:text-red-900"
+                            onClick={() => handleDeleteTask(task.id)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        
+        {/* Empty state */}
+        {!loading && !error && tasks.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks found</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Get started by creating your first task.
+            </p>
+            <div className="mt-6">
+              <Link to="/dashboard/tasks/new">
+                <button type="button" className="btn btn-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                  </svg>
+                  New Task
+                </button>
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

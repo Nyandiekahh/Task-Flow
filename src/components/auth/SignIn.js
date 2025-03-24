@@ -21,13 +21,22 @@ const SignIn = () => {
   const handleSubmit = async (values, { setSubmitting }) => {
     try {
       setApiError(null);
+      
+      // Wait for the sign-in process to complete
       await signIn(values.email, values.password);
       
-      // If remember me is checked, we could set a longer token expiry
-      // This would require backend changes
+      // Handle remember me if needed
+      if (values.rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+      }
       
-      navigate('/dashboard');
+      // Add a small delay to ensure state updates have propagated
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 100);
+      
     } catch (error) {
+      console.error('Sign in error:', error);
       setApiError(error.message || 'Invalid email or password. Please try again.');
     } finally {
       setSubmitting(false);
