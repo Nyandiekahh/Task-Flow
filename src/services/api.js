@@ -25,6 +25,27 @@ api.interceptors.request.use(
   }
 );
 
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    console.log('API Error Response:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      headers: error.response?.headers
+    });
+    
+    // Keep the original error but enhance it with the response data
+    if (error.response && error.response.data) {
+      error.responseData = error.response.data;
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
 // Auth API service
 export const authAPI = {
   login: async (email, password) => {
@@ -33,6 +54,7 @@ export const authAPI = {
   },
   
   register: async (userData) => {
+    console.log('API register called with:', userData);
     const response = await api.post('/auth/register/', userData);
     return response.data;
   },

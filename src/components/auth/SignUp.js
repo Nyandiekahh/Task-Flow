@@ -27,12 +27,83 @@ const SignUp = () => {
   const handleSubmit = async (values, { setSubmitting }) => {
     try {
       setApiError(null);
+      console.log('Submitting registration with:', {
+        email: values.email,
+        password: values.password,
+        name: values.name,
+        confirmPassword: values.confirmPassword
+      });
+      
       await signUp(values.email, values.password, values.name);
       
       // After successful registration and login, navigate to the first onboarding step
       navigate('/onboarding/org-details');
     } catch (error) {
-      setApiError(error.message || 'An error occurred during sign up. Please try again.');
+      console.error('Registration error full details:', error);
+      
+      // Log the complete error structure
+      if (error.response) {
+        console.error('Error response data:', error.response.data);
+        console.error('Error response status:', error.response.status);
+        console.error('Error response headers:', error.response.headers);
+      } else if (error.responseData) {
+        console.error('Error responseData:', error.responseData);
+      } else if (error.request) {
+        console.error('Error request:', error.request);
+      }
+      
+      // Handle axios error response
+      let errorMessage = 'An error occurred during sign up. Please try again.';
+      
+      // Try to get the response data from error.response or error.responseData
+      const responseData = error.response?.data || error.responseData;
+      
+      if (responseData) {
+        // Handle different error formats from Django REST Framework
+        if (typeof responseData === 'string') {
+          errorMessage = responseData;
+        } else if (responseData.detail) {
+          errorMessage = responseData.detail;
+        } else if (responseData.non_field_errors) {
+          errorMessage = Array.isArray(responseData.non_field_errors) 
+            ? responseData.non_field_errors.join(' ') 
+            : responseData.non_field_errors;
+        } else {
+          // Check for field-specific errors and create a formatted message
+          const fieldErrors = [];
+          
+          // Update field names to match backend expectations
+          const fieldMap = {
+            'name': 'Name',
+            'email': 'Email',
+            'password': 'Password',
+            'confirm_password': 'Confirm Password'
+          };
+          
+          // Check each possible field error
+          Object.keys(fieldMap).forEach(field => {
+            if (responseData[field]) {
+              const fieldError = Array.isArray(responseData[field]) 
+                ? responseData[field].join(' ') 
+                : responseData[field];
+              fieldErrors.push(`${fieldMap[field]}: ${fieldError}`);
+            }
+          });
+          
+          if (fieldErrors.length > 0) {
+            errorMessage = fieldErrors.join('\n');
+          } else {
+            // If we couldn't extract specific errors, show the raw response
+            errorMessage = JSON.stringify(responseData, null, 2);
+          }
+        }
+      } else {
+        // For other types of errors
+        errorMessage = error.message || 'An error occurred during sign up. Please try again.';
+      }
+      
+      console.log('Setting error message:', errorMessage);
+      setApiError(errorMessage);
     } finally {
       setSubmitting(false);
     }

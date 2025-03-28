@@ -46,7 +46,20 @@ export const AuthProvider = ({ children }) => {
   const signUp = useCallback(async (email, password, name) => {
     setError(null);
     try {
-      const response = await authAPI.register(email, password, name);
+      console.log('Sending registration data:', { email, password, name });
+      
+      // Create userData object with the correct field names
+      const userData = {
+        email: email,
+        name: name,           // Changed from username to name
+        password: password,
+        confirm_password: password // Changed from password2 to confirm_password
+      };
+      
+      console.log('Registration payload:', userData);
+      
+      // Call register with the userData object
+      const response = await authAPI.register(userData);
       
       // Store tokens from registration response
       if (response.access) {
@@ -64,6 +77,7 @@ export const AuthProvider = ({ children }) => {
       
       return response;
     } catch (error) {
+      console.error('Full signup error:', error);
       setError(error.message || 'An error occurred during signup');
       throw error;
     }
