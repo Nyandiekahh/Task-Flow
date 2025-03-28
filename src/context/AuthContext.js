@@ -7,6 +7,7 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -16,9 +17,12 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       try {
         // Check if we have a token
-        const token = localStorage.getItem('token');
+        const storedToken = localStorage.getItem('token');
         
-        if (token) {
+        if (storedToken) {
+          // Set token in state
+          setToken(storedToken);
+          
           // Get user data
           const userData = await authAPI.getCurrentUser();
           setCurrentUser(userData);
@@ -28,6 +32,7 @@ export const AuthProvider = ({ children }) => {
         // If token is invalid or expired, clear it
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
+        setToken(null);
         setCurrentUser(null);
       } finally {
         setLoading(false);
@@ -46,6 +51,7 @@ export const AuthProvider = ({ children }) => {
       // Store tokens from registration response
       if (response.access) {
         localStorage.setItem('token', response.access);
+        setToken(response.access);
       }
       if (response.refresh) {
         localStorage.setItem('refreshToken', response.refresh);
@@ -58,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       
       return response;
     } catch (error) {
-      setError(error.message);
+      setError(error.message || 'An error occurred during signup');
       throw error;
     }
   }, []);
@@ -73,6 +79,7 @@ export const AuthProvider = ({ children }) => {
       // Store tokens properly
       if (response.access) {
         localStorage.setItem('token', response.access);
+        setToken(response.access);
       }
       if (response.refresh) {
         localStorage.setItem('refreshToken', response.refresh);
@@ -84,7 +91,7 @@ export const AuthProvider = ({ children }) => {
       
       return userData;
     } catch (error) {
-      setError(error.message);
+      setError(error.message || 'An error occurred during sign in');
       throw error;
     }
   }, []);
@@ -93,16 +100,43 @@ export const AuthProvider = ({ children }) => {
   const signOut = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
+    setToken(null);
     setCurrentUser(null);
+  }, []);
+  
+  // Refresh the access token using refresh token
+  const refreshToken = useCallback(async () => {
+    try {
+      const refreshTokenValue = localStorage.getItem('refreshToken');
+      if (!refreshTokenValue) {
+        throw new Error('No refresh token available');
+      }
+      
+      const response = await authAPI.refreshToken(refreshTokenValue);
+      
+      if (response.access) {
+        localStorage.setItem('token', response.access);
+        setToken(response.access);
+        return response.access;
+      }
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      // If refresh fails, sign the user out
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      setToken(null);
+      setCurrentUser(null);
+      throw error;
+    }
   }, []);
   
   // Request password reset
   const resetPassword = useCallback(async (email) => {
     setError(null);
     try {
-      return await authAPI.requestPasswordReset(email);
+      return await authAPI.resetPassword(email);
     } catch (error) {
-      setError(error.message);
+      setError(error.message || 'An error occurred during password reset');
       throw error;
     }
   }, []);
@@ -111,27 +145,37 @@ export const AuthProvider = ({ children }) => {
   const confirmPasswordReset = useCallback(async (uid, token, newPassword) => {
     setError(null);
     try {
-      return await authAPI.confirmPasswordReset(uid, token, newPassword);
+      return await authAPI.confirmResetPassword(uid, token, newPassword);
     } catch (error) {
-      setError(error.message);
+      setError(error.message || 'An error occurred during password reset confirmation');
       throw error;
     }
   }, []);
   
-  // Update user profile (if needed)
+  // Update user profile
   const updateProfile = useCallback(async (userData) => {
     setError(null);
-    // This will be implemented when we add a profile update endpoint
+    try {
+      // Implement when profile update endpoint is available
+      // const response = await authAPI.updateProfile(userData);
+      // setCurrentUser(prevUser => ({ ...prevUser, ...response }));
+      // return response;
+    } catch (error) {
+      setError(error.message || 'An error occurred during profile update');
+      throw error;
+    }
   }, []);
   
   // Context value
   const value = {
     currentUser,
+    token,
     loading,
     error,
     signUp,
     signIn,
     signOut,
+    refreshToken,
     resetPassword,
     confirmPasswordReset,
     updateProfile

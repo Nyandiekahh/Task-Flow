@@ -18,9 +18,9 @@ const NewProject = () => {
     status: 'planning' // Default status
   });
 
-  // Fetch users from backend when component loads
+  // Fetch team members from backend when component loads
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchTeamMembers = async () => {
       try {
         setLoading(true);
         const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
@@ -31,17 +31,18 @@ const NewProject = () => {
           'Content-Type': 'application/json'
         };
         
-        const response = await axios.get(`${API_URL}/accounts/users/`, { headers });
+        // Use the team-members endpoint instead of accounts/users
+        const response = await axios.get(`${API_URL}/team-members/`, { headers });
         setUsers(response.data);
       } catch (err) {
-        console.error("Error fetching users:", err);
+        console.error("Error fetching team members:", err);
         setError("Failed to load team members. Please try again later.");
       } finally {
         setLoading(false);
       }
     };
     
-    fetchUsers();
+    fetchTeamMembers();
   }, []);
 
   // Handle input changes
@@ -78,18 +79,14 @@ const NewProject = () => {
         'Content-Type': 'application/json'
       };
       
-      // Use project API service instead of direct axios call
-      // First create the project
-      const projectAPI = {
-        createProject: async (data) => {
-          const response = await axios.post(`${API_URL}/projects/`, data, { headers });
-          return response.data;
-        }
-      };
+      // Create the project
+      const projectResponse = await axios.post(
+        `${API_URL}/projects/`, 
+        projectData, 
+        { headers }
+      );
       
-      const projectResponse = await projectAPI.createProject(projectData);
-      
-      const projectId = projectResponse.id;
+      const projectId = projectResponse.data.id;
       
       // Then add team members to the project
       if (selectedUsers.length > 0) {
@@ -214,6 +211,11 @@ const NewProject = () => {
                 {loading ? (
                   <div className="mt-4 flex items-center justify-center">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                  </div>
+                ) : users.length === 0 ? (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg text-center">
+                    <p className="text-gray-600">No team members available.</p>
+                    <p className="text-sm text-gray-500 mt-2">Please add team members in the admin panel first.</p>
                   </div>
                 ) : (
                   <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
