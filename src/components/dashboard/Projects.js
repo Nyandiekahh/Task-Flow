@@ -59,12 +59,14 @@ const Projects = () => {
             </p>
           </div>
           <div className="mt-4 flex md:mt-0 md:ml-4">
-            <button type="button" className="btn btn-primary">
-              <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
-              New Project
-            </button>
+            <Link to="/dashboard/projects/new">
+              <button type="button" className="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                New Project
+              </button>
+            </Link>
           </div>
         </div>
 
@@ -101,9 +103,9 @@ const Projects = () => {
                     <span>Progress</span>
                     <span>{project.progress}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
                     <div 
-                      className="bg-blue-600 h-2 rounded-full" 
+                      className="bg-blue-600 h-2.5 rounded-full" 
                       style={{ width: `${project.progress}%` }}
                     ></div>
                   </div>

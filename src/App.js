@@ -1,14 +1,28 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-
-// Landing Page Components
-import Landing from './components/landing/Landing';
+import './App.css';
 
 // Auth Components
-import SignUp from './components/auth/SignUp';
 import SignIn from './components/auth/SignIn';
+import SignUp from './components/auth/SignUp';
 import ResetPassword from './components/auth/ResetPassword';
 import ResetPasswordConfirm from './components/auth/ResetPasswordConfirm';
+
+// Landing Components
+import Landing from './components/landing/Landing';
+
+// Dashboard Components
+import DashboardLayout from './components/dashboard/DashboardLayout';
+import DashboardHome from './components/dashboard/DashboardHome';
+import Tasks from './components/dashboard/Tasks';
+import TaskDetail from './components/dashboard/TaskDetail';
+import NewTask from './components/dashboard/NewTask';
+import Projects from './components/dashboard/Projects';
+import NewProject from './components/dashboard/NewProject';
+import Team from './components/dashboard/Team';
+import TeamInvite from './components/dashboard/TeamInvite';
+import Calendar from './components/dashboard/Calendar';
+import Reports from './components/dashboard/Reports';
 
 // Onboarding Components
 import OnboardingLayout from './components/onboarding/OnboardingLayout';
@@ -17,21 +31,13 @@ import Step2TeamMembers from './components/onboarding/Step2TeamMembers';
 import Step3Roles from './components/onboarding/Step3Roles';
 import Step4Complete from './components/onboarding/Step4Complete';
 
-// Main Dashboard
-import DashboardLayout from './components/dashboard/DashboardLayout';
-import DashboardHome from './components/dashboard/DashboardHome';
-import Tasks from './components/dashboard/Tasks';
-import TaskDetail from './components/dashboard/TaskDetail';
-import NewTask from './components/dashboard/NewTask';
-import Team from './components/dashboard/Team';
-
-// Context Providers
+// Context
 import { AuthProvider } from './context/AuthContext';
 import { OnboardingProvider } from './context/OnboardingContext';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  // Check if user is authenticated - using 'token' instead of 'accessToken'
+  // Check if user is authenticated
   const isAuthenticated = localStorage.getItem('token');
   
   if (!isAuthenticated) {
@@ -48,16 +54,13 @@ function App() {
       <AuthProvider>
         <OnboardingProvider>
           <Routes>
-            {/* Landing Page Route */}
+            {/* Public Routes */}
             <Route path="/" element={<Landing />} />
-            
-            {/* Auth Routes */}
-            <Route path="/signup" element={<SignUp />} />
             <Route path="/signin" element={<SignIn />} />
+            <Route path="/signup" element={<SignUp />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/reset-password-confirm/:uid/:token" element={<ResetPasswordConfirm />} />
             
-            {/* Protected Routes */}
             {/* Onboarding Routes */}
             <Route path="/onboarding" element={
               <ProtectedRoute>
@@ -77,12 +80,25 @@ function App() {
               </ProtectedRoute>
             }>
               <Route index element={<DashboardHome />} />
+              
+              {/* Tasks Routes */}
               <Route path="tasks" element={<Tasks />} />
               <Route path="tasks/new" element={<NewTask />} />
               <Route path="tasks/:id" element={<TaskDetail />} />
               <Route path="tasks/:id/edit" element={<NewTask />} />
+              
+              {/* Projects Routes */}
+              <Route path="projects" element={<Projects />} />
+              <Route path="projects/new" element={<NewProject />} />
+              
+              {/* Team Routes */}
               <Route path="team" element={<Team />} />
-              {/* Add other dashboard routes as needed */}
+              <Route path="team/invite" element={<TeamInvite />} />
+              
+              {/* Other Dashboard routes */}
+              <Route path="calendar" element={<Calendar />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="settings" element={<DashboardHome />} />
             </Route>
             
             {/* Catch-all redirect */}

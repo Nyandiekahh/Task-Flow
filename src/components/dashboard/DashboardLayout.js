@@ -1,13 +1,7 @@
 import React, { useContext } from 'react';
-import { Navigate, Routes, Route } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
-import DashboardHome from './DashboardHome';
-import Projects from './Projects';
-import Tasks from './Tasks';
-import Calendar from './Calendar';
-import Team from './Team';
-import Reports from './Reports';
 
 const DashboardLayout = () => {
   const { currentUser, loading } = useContext(AuthContext);
@@ -33,16 +27,7 @@ const DashboardLayout = () => {
       <div className="flex flex-col w-0 flex-1 overflow-hidden">
         {/* Main content area with routing */}
         <main className="flex-1 relative overflow-y-auto focus:outline-none">
-          <Routes>
-            <Route index element={<DashboardHome />} />
-            <Route path="projects" element={<Projects />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="calendar" element={<Calendar />} />
-            <Route path="team" element={<Team />} />
-            <Route path="reports" element={<Reports />} />
-            {/* Add more routes as needed */}
-            <Route path="*" element={<DashboardHome />} />
-          </Routes>
+          <Outlet />
         </main>
       </div>
     </div>
