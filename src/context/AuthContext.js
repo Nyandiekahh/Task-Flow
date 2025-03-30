@@ -148,6 +148,7 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = useCallback(async (email) => {
     setError(null);
     try {
+      // This will now send an OTP instead of a reset link
       return await authAPI.resetPassword(email);
     } catch (error) {
       setError(error.message || 'An error occurred during password reset');
@@ -156,10 +157,11 @@ export const AuthProvider = ({ children }) => {
   }, []);
   
   // Confirm password reset
-  const confirmPasswordReset = useCallback(async (uid, token, newPassword) => {
+  const confirmPasswordReset = useCallback(async (email, otp, newPassword) => {
     setError(null);
     try {
-      return await authAPI.confirmResetPassword(uid, token, newPassword);
+      // This will now verify the OTP instead of using uid/token
+      return await authAPI.confirmResetPassword(email, otp, newPassword);
     } catch (error) {
       setError(error.message || 'An error occurred during password reset confirmation');
       throw error;

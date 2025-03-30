@@ -1,21 +1,74 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useContext } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import { AuthContext } from '../../context/AuthContext';
 
 const TeamInvite = () => {
   const navigate = useNavigate();
+  const { token } = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
   
   // Team members form state
   const [invites, setInvites] = useState([
-    { email: '', role: 'member', name: '' }
+    { email: '', role: 'admin', name: '' }
   ]);
+  
+  // State for titles from the system
+  const [titles, setTitles] = useState([]);
+  const [titlesLoading, setTitlesLoading] = useState(true);
+  const [titlesError, setTitlesError] = useState(null);
+  
+  // Fetch titles when component mounts
+  useEffect(() => {
+    const fetchTitles = async () => {
+      try {
+        setTitlesLoading(true);
+        setTitlesError(null);
+        
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+        
+        // Get titles
+        const response = await axios.get(`${API_URL}/titles/`, { headers });
+        setTitles(response.data);
+        
+        // Update default role selection in forms
+        if (response.data.length > 0) {
+          const updatedInvites = invites.map(invite => ({
+            ...invite,
+            role: response.data[0].id // Set the first title as default
+          }));
+          setInvites(updatedInvites);
+        }
+        
+      } catch (err) {
+        console.error("Error fetching titles:", err);
+        if (err.response?.status === 404) {
+          // This might indicate titles haven't been set up yet
+          setTitlesError("Titles haven't been set up yet. Users will be invited as Admins.");
+        } else {
+          setTitlesError("Failed to load titles. Users will be invited as Admins.");
+        }
+      } finally {
+        setTitlesLoading(false);
+      }
+    };
+    
+    if (token) {
+      fetchTitles();
+    }
+  }, [token, invites]);
 
   // Add another invite field
   const addInviteField = () => {
-    setInvites([...invites, { email: '', role: 'member', name: '' }]);
+    // Use the first title ID if available, otherwise use 'admin'
+    const defaultRole = titles.length > 0 ? titles[0].id : 'admin';
+    setInvites([...invites, { email: '', role: defaultRole, name: '' }]);
   };
 
   // Remove an invite field
@@ -34,6 +87,11 @@ const TeamInvite = () => {
       [name]: value
     };
     setInvites(updatedInvites);
+  };
+
+  // Navigate to titles setup
+  const navigateToTitlesSetup = () => {
+    navigate('/onboarding/roles');
   };
 
   // Handle form submission
@@ -77,7 +135,7 @@ const TeamInvite = () => {
       
       setSuccess(true);
       // Clear form after successful submission
-      setInvites([{ email: '', role: 'member', name: '' }]);
+      setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
       
       // Show success message for 3 seconds, then reset
       setTimeout(() => {
@@ -92,154 +150,225 @@ const TeamInvite = () => {
     }
   };
 
+  // Get role options for select
+  const getRoleOptions = () => {
+    // If we have loaded titles, use those
+    if (titles && titles.length > 0) {
+      return titles.map(title => (
+        <option key={title.id} value={title.id}>
+          {title.name}
+        </option>
+      ));
+    }
+    
+    // Otherwise, just use Admin as default
+    return [
+      <option key="admin" value="admin">Admin</option>
+    ];
+  };
+
+  // Basic styling classes for use throughout the component
+  const baseStyles = {
+    container: "w-full max-w-4xl mx-auto py-6",
+    header: "text-2xl font-bold text-gray-900 mb-4",
+    subtext: "text-sm text-gray-500 mb-6",
+    card: "bg-white shadow-lg rounded-lg overflow-hidden mb-6",
+    cardHeader: "bg-gray-50 px-6 py-4 border-b border-gray-200",
+    cardBody: "px-6 py-4",
+    cardFooter: "bg-gray-50 px-6 py-3 flex justify-end border-t border-gray-200",
+    input: "w-full p-2 border border-gray-300 rounded-md",
+    select: "w-full p-2 border border-gray-300 rounded-md",
+    primaryButton: "bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded",
+    secondaryButton: "bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded mr-2",
+    dangerButton: "text-red-600 hover:text-red-800",
+    alertSuccess: "bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4",
+    alertError: "bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4",
+    alertWarning: "bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4",
+  };
+
   return (
-    <div className="py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Invite Team Members</h1>
-        
-        {error && (
-          <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            </div>
+    <div className={baseStyles.container}>
+      <h1 className={baseStyles.header}>Invite Team Members</h1>
+      <p className={baseStyles.subtext}>
+        Invite colleagues to join your organization with their appropriate roles.
+      </p>
+      
+      {error && (
+        <div className={baseStyles.alertError}>
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {success && (
+        <div className={baseStyles.alertSuccess}>
+          <p>Invitations sent successfully!</p>
+        </div>
+      )}
+      
+      {/* Titles Setup Notice */}
+      {titlesError && (
+        <div className={baseStyles.alertWarning}>
+          <p>
+            You haven't set up organization titles and roles yet. 
+            New team members will be invited as Admins by default.
+          </p>
+          <div className="mt-2">
+            <button 
+              onClick={navigateToTitlesSetup}
+              className="underline text-yellow-700 hover:text-yellow-800 mr-4"
+            >
+              Set up titles and roles now
+            </button>
+            <span>or</span>
+            <Link
+              to="/dashboard/team"
+              className="underline text-yellow-700 hover:text-yellow-800 ml-4"
+            >
+              Continue without setting up titles
+            </Link>
           </div>
-        )}
-        
-        {success && (
-          <div className="mb-4 bg-green-50 border-l-4 border-green-400 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-green-700">Invitations sent successfully!</p>
-              </div>
-            </div>
+        </div>
+      )}
+      
+      {/* Title Management Section - Only show if titles are available */}
+      {titles.length > 0 && (
+        <div className={baseStyles.card}>
+          <div className={baseStyles.cardHeader}>
+            <h3 className="text-lg font-medium">Available Team Titles</h3>
           </div>
-        )}
-        
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <form onSubmit={handleSubmit}>
-            <div className="px-4 py-5 sm:p-6">
-              <div className="mb-6">
-                <h3 className="text-lg font-medium text-gray-900">Team Members</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Invite colleagues to join your organization. They will receive an email with instructions to set up their account.
-                </p>
-              </div>
-              
-              {invites.map((invite, index) => (
-                <div key={index} className="mb-4 p-4 border border-gray-200 rounded-md bg-gray-50">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-sm font-medium text-gray-700">Team Member {index + 1}</h4>
-                    {index > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => removeInviteField(index)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {/* Name Field */}
-                    <div>
-                      <label htmlFor={`name-${index}`} className="block text-sm font-medium text-gray-700">Name (Optional)</label>
-                      <input
-                        type="text"
-                        name="name"
-                        id={`name-${index}`}
-                        value={invite.name}
-                        onChange={(e) => handleInputChange(index, e)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      />
-                    </div>
-                    
-                    {/* Email Field */}
-                    <div>
-                      <label htmlFor={`email-${index}`} className="block text-sm font-medium text-gray-700">Email Address</label>
-                      <input
-                        type="email"
-                        name="email"
-                        id={`email-${index}`}
-                        required
-                        value={invite.email}
-                        onChange={(e) => handleInputChange(index, e)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      />
-                    </div>
-                    
-                    {/* Role Field */}
-                    <div>
-                      <label htmlFor={`role-${index}`} className="block text-sm font-medium text-gray-700">Role</label>
-                      <select
-                        id={`role-${index}`}
-                        name="role"
-                        value={invite.role}
-                        onChange={(e) => handleInputChange(index, e)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="manager">Manager</option>
-                        <option value="member">Member</option>
-                        <option value="guest">Guest</option>
-                      </select>
-                    </div>
-                  </div>
+          <div className={baseStyles.cardBody}>
+            <p className="mb-4">
+              These are the current titles in your organization. Team members will be assigned one of these titles.
+            </p>
+            
+            <div className="flex flex-wrap gap-2 mb-4">
+              {titles.map((title) => (
+                <div 
+                  key={title.id} 
+                  className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full"
+                >
+                  <span>{title.name}</span>
                 </div>
               ))}
-              
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={addInviteField}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  <svg className="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                  </svg>
-                  Add Another
-                </button>
-              </div>
             </div>
             
-            <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
+            <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => navigate('/dashboard')}
-                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 mr-3"
+                onClick={navigateToTitlesSetup}
+                className="text-blue-600 hover:text-blue-800"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-              >
-                {loading ? (
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : null}
-                Send Invitations
+                Manage Titles and Permissions
               </button>
             </div>
-          </form>
+          </div>
         </div>
+      )}
+      
+      <div className={baseStyles.card}>
+        <div className={baseStyles.cardHeader}>
+          <h3 className="text-lg font-medium">Invite Team Members</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            They will receive an email with instructions to set up their account.
+          </p>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div className={baseStyles.cardBody}>
+            {invites.map((invite, index) => (
+              <div key={index} className="mb-4 p-4 border border-gray-200 rounded-md bg-gray-50">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium">Team Member {index + 1}</h4>
+                  {index > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => removeInviteField(index)}
+                      className={baseStyles.dangerButton}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {/* Name Field */}
+                  <div>
+                    <label htmlFor={`name-${index}`} className="block text-sm font-medium mb-1">Name (Optional)</label>
+                    <input
+                      type="text"
+                      name="name"
+                      id={`name-${index}`}
+                      value={invite.name}
+                      onChange={(e) => handleInputChange(index, e)}
+                      className={baseStyles.input}
+                    />
+                  </div>
+                  
+                  {/* Email Field */}
+                  <div>
+                    <label htmlFor={`email-${index}`} className="block text-sm font-medium mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      name="email"
+                      id={`email-${index}`}
+                      required
+                      value={invite.email}
+                      onChange={(e) => handleInputChange(index, e)}
+                      className={baseStyles.input}
+                    />
+                  </div>
+                  
+                  {/* Role Field */}
+                  <div>
+                    <label htmlFor={`role-${index}`} className="block text-sm font-medium mb-1">
+                      {titles && titles.length > 0 ? 'Title' : 'Role'}
+                    </label>
+                    <select
+                      id={`role-${index}`}
+                      name="role"
+                      value={invite.role}
+                      onChange={(e) => handleInputChange(index, e)}
+                      className={baseStyles.select}
+                    >
+                      {titlesLoading ? (
+                        <option value="">Loading...</option>
+                      ) : (
+                        getRoleOptions()
+                      )}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={addInviteField}
+                className={baseStyles.secondaryButton}
+              >
+                + Add Another Member
+              </button>
+            </div>
+          </div>
+          
+          <div className={baseStyles.cardFooter}>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/team')}
+              className={baseStyles.secondaryButton}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className={baseStyles.primaryButton}
+            >
+              {loading ? 'Sending...' : 'Send Invitations'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

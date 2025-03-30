@@ -69,10 +69,17 @@ export const authAPI = {
     return response.data;
   },
   
-  confirmResetPassword: async (uid, token, newPassword) => {
-    const response = await api.post(`/auth/password-reset-confirm/${uid}/${token}/`, {
-      password: newPassword,
+  confirmResetPassword: async (email, otp, newPassword) => {
+    const response = await api.post('/auth/password-reset-verify/', {
+      email,
+      otp,
+      new_password: newPassword
     });
+    return response.data;
+  },
+  
+  refreshToken: async (refreshToken) => {
+    const response = await api.post('/auth/token/refresh/', { refresh: refreshToken });
     return response.data;
   },
 };

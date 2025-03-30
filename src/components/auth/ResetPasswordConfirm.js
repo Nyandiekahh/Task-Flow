@@ -1,13 +1,17 @@
 // src/components/auth/ResetPasswordConfirm.js
 
 import React, { useState, useContext } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { motion } from 'framer-motion';
 import { AuthContext } from '../../context/AuthContext';
 
 const validationSchema = Yup.object({
+  email: Yup.string().email('Invalid email address').required('Email is required'),
+  otp: Yup.string()
+    .required('OTP is required')
+    .matches(/^\d{6}$/, 'OTP must be a 6-digit number'),
   password: Yup.string()
     .min(8, 'Password must be at least 8 characters')
     .required('Password is required'),
@@ -18,7 +22,6 @@ const validationSchema = Yup.object({
 
 const ResetPasswordConfirm = () => {
   const { confirmPasswordReset } = useContext(AuthContext);
-  const { uid, token } = useParams();
   const navigate = useNavigate();
   const [resetComplete, setResetComplete] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -26,10 +29,10 @@ const ResetPasswordConfirm = () => {
   const handleSubmit = async (values, { setSubmitting }) => {
     try {
       setApiError(null);
-      await confirmPasswordReset(uid, token, values.password);
+      await confirmPasswordReset(values.email, values.otp, values.password);
       setResetComplete(true);
     } catch (error) {
-      setApiError(error.message || 'Failed to reset password. Please try again or request a new reset link.');
+      setApiError(error.message || 'Failed to reset password. Please check your OTP and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -52,7 +55,7 @@ const ResetPasswordConfirm = () => {
           Set new password
         </h2>
         <p className="mt-2 text-center text-sm text-secondary-600">
-          Enter your new password below
+          Enter the 6-digit OTP sent to your email and your new password
         </p>
       </motion.div>
 
@@ -90,6 +93,8 @@ const ResetPasswordConfirm = () => {
 
               <Formik
                 initialValues={{
+                  email: '',
+                  otp: '',
                   password: '',
                   confirmPassword: '',
                 }}
@@ -98,6 +103,35 @@ const ResetPasswordConfirm = () => {
               >
                 {({ isSubmitting, errors, touched }) => (
                   <Form className="space-y-6">
+                    <div>
+                      <label htmlFor="email" className="label">
+                        Email address
+                      </label>
+                      <Field
+                        id="email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        className={`input ${errors.email && touched.email ? 'border-danger-500' : ''}`}
+                      />
+                      <ErrorMessage name="email" component="div" className="mt-1 text-sm text-danger-600" />
+                    </div>
+
+                    <div>
+                      <label htmlFor="otp" className="label">
+                        OTP Code
+                      </label>
+                      <Field
+                        id="otp"
+                        name="otp"
+                        type="text"
+                        className={`input ${errors.otp && touched.otp ? 'border-danger-500' : ''}`}
+                        placeholder="6-digit code"
+                        maxLength={6}
+                      />
+                      <ErrorMessage name="otp" component="div" className="mt-1 text-sm text-danger-600" />
+                    </div>
+
                     <div>
                       <label htmlFor="password" className="label">
                         New Password

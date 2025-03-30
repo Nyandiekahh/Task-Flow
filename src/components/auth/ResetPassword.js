@@ -45,7 +45,7 @@ const ResetPassword = () => {
           Reset your password
         </h2>
         <p className="mt-2 text-center text-sm text-secondary-600">
-          Enter your email address and we'll send you a link to reset your password.
+          Enter your email address and we'll send you an OTP to reset your password.
         </p>
       </motion.div>
 
@@ -67,9 +67,12 @@ const ResetPassword = () => {
               </svg>
               <h3 className="text-lg font-medium text-secondary-900 mb-2">Check your email</h3>
               <p className="text-secondary-600 mb-6">
-                We've sent a password reset link to your email address. Please check your inbox and follow the link to reset your password.
+                We've sent a 6-digit OTP code to your email address. Please check your inbox and use the code to reset your password.
               </p>
-              <Link to="/signin" className="btn btn-primary">
+              <Link to="/reset-password-confirm" className="btn btn-primary mr-3">
+                Enter OTP
+              </Link>
+              <Link to="/signin" className="btn btn-outline">
                 Return to Sign In
               </Link>
             </motion.div>
@@ -110,7 +113,7 @@ const ResetPassword = () => {
                         disabled={isSubmitting}
                         className="btn btn-primary w-full py-3"
                       >
-                        {isSubmitting ? 'Sending reset link...' : 'Send reset link'}
+                        {isSubmitting ? 'Sending OTP...' : 'Send OTP'}
                       </button>
                     </div>
                   </Form>

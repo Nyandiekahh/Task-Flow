@@ -23,6 +23,7 @@ import Team from './components/dashboard/Team';
 import TeamInvite from './components/dashboard/TeamInvite';
 import Calendar from './components/dashboard/Calendar';
 import Reports from './components/dashboard/Reports';
+import Settings from './components/dashboard/Settings'; // Import the Settings component
 
 // Onboarding Components
 import OnboardingLayout from './components/onboarding/OnboardingLayout';
@@ -59,7 +60,7 @@ function App() {
             <Route path="/signin" element={<SignIn />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/reset-password-confirm/:uid/:token" element={<ResetPasswordConfirm />} />
+            <Route path="/reset-password-confirm" element={<ResetPasswordConfirm />} />
             
             {/* Onboarding Routes */}
             <Route path="/onboarding" element={
@@ -98,7 +99,7 @@ function App() {
               {/* Other Dashboard routes */}
               <Route path="calendar" element={<Calendar />} />
               <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<DashboardHome />} />
+              <Route path="settings" element={<Settings />} /> {/* Use the Settings component here */}
             </Route>
             
             {/* Catch-all redirect */}

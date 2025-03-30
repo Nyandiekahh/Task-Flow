@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { Link } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
 
@@ -14,6 +15,21 @@ const Team = () => {
   const [filterStatus, setFilterStatus] = useState('All');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   const [roles, setRoles] = useState(['All']);
+  
+  // Team invite modal state
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [inviteError, setInviteError] = useState(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  
+  // Team members form state for invites
+  const [invites, setInvites] = useState([
+    { email: '', role: 'admin', name: '' }
+  ]);
+  
+  // State for titles from the system
+  const [titles, setTitles] = useState([]);
+  const [titlesLoading, setTitlesLoading] = useState(false);
   
   // Fetch team members
   useEffect(() => {
@@ -37,6 +53,25 @@ const Team = () => {
           setRoles(roleNames);
         } catch (rolesError) {
           console.error("Failed to load roles:", rolesError);
+        }
+        
+        // Get titles for the invite form
+        try {
+          setTitlesLoading(true);
+          const titlesResponse = await axios.get(`${API_URL}/titles/`, { headers });
+          setTitles(titlesResponse.data);
+          
+          // Update default role selection in forms if titles exist
+          if (titlesResponse.data.length > 0) {
+            setInvites(invites.map(invite => ({
+              ...invite,
+              role: titlesResponse.data[0].id
+            })));
+          }
+        } catch (titlesError) {
+          console.error("Failed to load titles:", titlesError);
+        } finally {
+          setTitlesLoading(false);
         }
         
         // Transform data to include needed fields
@@ -110,6 +145,103 @@ const Team = () => {
     return colors[index];
   };
   
+  // Add another invite field
+  const addInviteField = () => {
+    // Use the first title ID if available, otherwise use 'admin'
+    const defaultRole = titles.length > 0 ? titles[0].id : 'admin';
+    setInvites([...invites, { email: '', role: defaultRole, name: '' }]);
+  };
+
+  // Remove an invite field
+  const removeInviteField = (index) => {
+    const updatedInvites = [...invites];
+    updatedInvites.splice(index, 1);
+    setInvites(updatedInvites);
+  };
+
+  // Handle input changes for invite form
+  const handleInviteInputChange = (index, e) => {
+    const { name, value } = e.target;
+    const updatedInvites = [...invites];
+    updatedInvites[index] = {
+      ...updatedInvites[index],
+      [name]: value
+    };
+    setInvites(updatedInvites);
+  };
+
+  // Handle invite form submission
+  const handleInviteSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validate emails
+    const isValid = invites.every(invite => {
+      if (!invite.email.trim()) return false;
+      // Simple email validation regex
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(invite.email);
+    });
+    
+    if (!isValid) {
+      setInviteError("Please enter valid email addresses for all team members.");
+      return;
+    }
+    
+    try {
+      setInviteLoading(true);
+      setInviteError(null);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Filter out any empty invites
+      const validInvites = invites.filter(invite => invite.email.trim() !== '');
+      
+      // Send invites to backend
+      await axios.post(
+        `${API_URL}/accounts/invite/`,
+        { invitations: validInvites },
+        { headers }
+      );
+      
+      setInviteSuccess(true);
+      // Clear form after successful submission
+      setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
+      
+      // Refresh team members list after successful invite
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (err) {
+      console.error("Error sending invites:", err);
+      setInviteError("Failed to send invites. Please try again.");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  // Get role options for select
+  const getRoleOptions = () => {
+    // If we have loaded titles, use those
+    if (titles && titles.length > 0) {
+      return titles.map(title => (
+        <option key={title.id} value={title.id}>
+          {title.name}
+        </option>
+      ));
+    }
+    
+    // Otherwise, just use Admin as default
+    return [
+      <option key="admin" value="admin">Admin</option>
+    ];
+  };
+  
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -124,7 +256,11 @@ const Team = () => {
             </p>
           </div>
           <div className="mt-4 flex md:mt-0 md:ml-4">
-            <button type="button" className="btn btn-primary">
+            <button 
+              type="button" 
+              onClick={() => setInviteModalOpen(true)} 
+              className="btn btn-primary"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
               </svg>
@@ -357,7 +493,11 @@ const Team = () => {
             </p>
             {!searchTerm && filterRole === 'All' && filterStatus === 'All' && (
               <div className="mt-6">
-                <button type="button" className="btn btn-primary">
+                <button 
+                  type="button" 
+                  onClick={() => setInviteModalOpen(true)}
+                  className="btn btn-primary"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
                   </svg>
@@ -390,6 +530,197 @@ const Team = () => {
                   </div>
                   <div className="text-sm text-gray-500 mt-1">Different Roles</div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Team Invite Modal */}
+        {inviteModalOpen && (
+          <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full m-4 max-h-90vh overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900">Invite Team Members</h3>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setInviteModalOpen(false);
+                      setInviteSuccess(false);
+                      setInviteError(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                {inviteError && (
+                  <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-red-700">{inviteError}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {inviteSuccess && (
+                  <div className="mb-4 bg-green-50 border-l-4 border-green-400 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-green-700">Invitations sent successfully! Refreshing page...</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Title Management Section - Only show if titles are available */}
+                {titles.length > 0 && (
+                  <div className="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Available Team Titles</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {titles.map((title) => (
+                        <div 
+                          key={title.id} 
+                          className="px-2 py-1 bg-primary-100 text-primary-800 rounded-full text-xs"
+                        >
+                          {title.name}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-2 text-xs text-gray-500">
+                      Team members will be assigned one of these titles. You can manage titles in organization settings.
+                    </div>
+                  </div>
+                )}
+                
+                <form onSubmit={handleInviteSubmit}>
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-500">
+                      Invite colleagues to join your organization. They will receive an email with instructions to set up their account.
+                    </p>
+                    
+                    {invites.map((invite, index) => (
+                      <div key={index} className="p-4 border border-gray-200 rounded-md bg-gray-50">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-sm font-medium text-gray-700">Team Member {index + 1}</h4>
+                          {index > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => removeInviteField(index)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                          {/* Name Field */}
+                          <div>
+                            <label htmlFor={`name-${index}`} className="block text-sm font-medium text-gray-700">Name (Optional)</label>
+                            <input
+                              type="text"
+                              name="name"
+                              id={`name-${index}`}
+                              value={invite.name}
+                              onChange={(e) => handleInviteInputChange(index, e)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            />
+                          </div>
+                          
+                          {/* Email Field */}
+                          <div>
+                            <label htmlFor={`email-${index}`} className="block text-sm font-medium text-gray-700">Email Address</label>
+                            <input
+                              type="email"
+                              name="email"
+                              id={`email-${index}`}
+                              required
+                              value={invite.email}
+                              onChange={(e) => handleInviteInputChange(index, e)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            />
+                          </div>
+                          
+                          {/* Role Field */}
+                          <div>
+                            <label htmlFor={`role-${index}`} className="block text-sm font-medium text-gray-700">
+                              {titles && titles.length > 0 ? 'Title' : 'Role'}
+                            </label>
+                            <select
+                              id={`role-${index}`}
+                              name="role"
+                              value={invite.role}
+                              onChange={(e) => handleInviteInputChange(index, e)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            >
+                              {titlesLoading ? (
+                                <option value="">Loading...</option>
+                              ) : (
+                                getRoleOptions()
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <button
+                      type="button"
+                      onClick={addInviteField}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      <svg className="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
+                      Add Another
+                    </button>
+                  </div>
+                  
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setInviteModalOpen(false)}
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={inviteLoading}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    >
+                      {inviteLoading ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Sending...
+                        </>
+                      ) : 'Send Invitations'}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
