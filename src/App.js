@@ -19,11 +19,12 @@ import TaskDetail from './components/dashboard/TaskDetail';
 import NewTask from './components/dashboard/NewTask';
 import Projects from './components/dashboard/Projects';
 import NewProject from './components/dashboard/NewProject';
+import ProjectDetails from './components/dashboard/ProjectDetails'; // Import ProjectDetails component
 import Team from './components/dashboard/Team';
 import TeamInvite from './components/dashboard/TeamInvite';
 import Calendar from './components/dashboard/Calendar';
 import Reports from './components/dashboard/Reports';
-import Settings from './components/dashboard/Settings'; // Import the Settings component
+import Settings from './components/dashboard/Settings';
 
 // Onboarding Components
 import OnboardingLayout from './components/onboarding/OnboardingLayout';
@@ -91,6 +92,8 @@ function App() {
               {/* Projects Routes */}
               <Route path="projects" element={<Projects />} />
               <Route path="projects/new" element={<NewProject />} />
+              <Route path="projects/:id" element={<ProjectDetails />} /> {/* Add ProjectDetails route */}
+              <Route path="projects/:id/edit" element={<NewProject />} /> {/* Add project edit route */}
               
               {/* Team Routes */}
               <Route path="team" element={<Team />} />
@@ -99,7 +102,7 @@ function App() {
               {/* Other Dashboard routes */}
               <Route path="calendar" element={<Calendar />} />
               <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<Settings />} /> {/* Use the Settings component here */}
+              <Route path="settings" element={<Settings />} />
             </Route>
             
             {/* Catch-all redirect */}
