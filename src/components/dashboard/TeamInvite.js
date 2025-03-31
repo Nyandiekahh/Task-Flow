@@ -10,22 +10,73 @@ const TeamInvite = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
   
+  // Organization status
+  const [orgStatus, setOrgStatus] = useState({
+    hasOrganization: false,
+    needsSetup: false,
+    checking: true
+  });
+  
   // Team members form state
   const [invites, setInvites] = useState([
-    { email: '', role: 'admin', name: '' }
+    { email: '', role: '', name: '' }
   ]);
   
-  // State for titles from the system
-  const [titles, setTitles] = useState([]);
-  const [titlesLoading, setTitlesLoading] = useState(true);
-  const [titlesError, setTitlesError] = useState(null);
+  // State for roles from the system
+  const [roles, setRoles] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [rolesError, setRolesError] = useState(null);
   
-  // Fetch titles when component mounts
+  // Check onboarding status when component mounts
   useEffect(() => {
-    const fetchTitles = async () => {
+    const checkOnboardingStatus = async () => {
       try {
-        setTitlesLoading(true);
-        setTitlesError(null);
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+        
+        // Check onboarding status
+        const response = await axios.get(`${API_URL}/onboarding/status/`, { headers });
+        
+        setOrgStatus({
+          hasOrganization: !!response.data.organization,
+          needsSetup: response.data.needs_organization_setup,
+          checking: false
+        });
+
+        // If user needs setup, redirect to organization setup
+        if (response.data.needs_organization_setup) {
+          navigate('/onboarding/organization-setup');
+        }
+        
+      } catch (err) {
+        console.error("Error checking onboarding status:", err);
+        setError("Failed to check organization status. Please refresh the page.");
+        setOrgStatus({
+          hasOrganization: false,
+          needsSetup: false,
+          checking: false
+        });
+      }
+    };
+    
+    if (token) {
+      checkOnboardingStatus();
+    }
+  }, [token, navigate]);
+  
+  // Fetch roles when component mounts and org status is confirmed
+  useEffect(() => {
+    const fetchRoles = async () => {
+      if (!orgStatus.hasOrganization || orgStatus.checking) {
+        return;
+      }
+      
+      try {
+        setRolesLoading(true);
+        setRolesError(null);
         
         const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
         const headers = {
@@ -33,41 +84,40 @@ const TeamInvite = () => {
           'Content-Type': 'application/json'
         };
         
-        // Get titles
-        const response = await axios.get(`${API_URL}/titles/`, { headers });
-        setTitles(response.data);
+        // Get roles from the API
+        const response = await axios.get(`${API_URL}/roles/roles/`, { headers });
+        setRoles(response.data);
         
-        // Update default role selection in forms
+        // Update default role selection in forms if roles exist
         if (response.data.length > 0) {
           const updatedInvites = invites.map(invite => ({
             ...invite,
-            role: response.data[0].id // Set the first title as default
+            role: response.data[0].id // Set the first role as default
           }));
           setInvites(updatedInvites);
         }
         
       } catch (err) {
-        console.error("Error fetching titles:", err);
+        console.error("Error fetching roles:", err);
         if (err.response?.status === 404) {
-          // This might indicate titles haven't been set up yet
-          setTitlesError("Titles haven't been set up yet. Users will be invited as Admins.");
+          setRolesError("Roles haven't been set up yet. Users will be invited as Admins.");
         } else {
-          setTitlesError("Failed to load titles. Users will be invited as Admins.");
+          setRolesError("Failed to load roles. Users will be invited as Admins.");
         }
       } finally {
-        setTitlesLoading(false);
+        setRolesLoading(false);
       }
     };
     
     if (token) {
-      fetchTitles();
+      fetchRoles();
     }
-  }, [token, invites]);
+  }, [token, invites, orgStatus]);
 
   // Add another invite field
   const addInviteField = () => {
-    // Use the first title ID if available, otherwise use 'admin'
-    const defaultRole = titles.length > 0 ? titles[0].id : 'admin';
+    // Use the first role ID if available, otherwise empty
+    const defaultRole = roles.length > 0 ? roles[0].id : '';
     setInvites([...invites, { email: '', role: defaultRole, name: '' }]);
   };
 
@@ -89,8 +139,8 @@ const TeamInvite = () => {
     setInvites(updatedInvites);
   };
 
-  // Navigate to titles setup
-  const navigateToTitlesSetup = () => {
+  // Navigate to roles setup
+  const navigateToRolesSetup = () => {
     navigate('/onboarding/roles');
   };
 
@@ -116,8 +166,6 @@ const TeamInvite = () => {
       setError(null);
       
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-      const token = localStorage.getItem('token');
-      
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -128,14 +176,14 @@ const TeamInvite = () => {
       
       // Send invites to backend
       await axios.post(
-        `${API_URL}/accounts/invite/`,
+        `${API_URL}/auth/invite/`,
         { invitations: validInvites },
         { headers }
       );
       
       setSuccess(true);
       // Clear form after successful submission
-      setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
+      setInvites([{ email: '', role: roles.length > 0 ? roles[0].id : '', name: '' }]);
       
       // Show success message for 3 seconds, then reset
       setTimeout(() => {
@@ -144,7 +192,11 @@ const TeamInvite = () => {
       
     } catch (err) {
       console.error("Error sending invites:", err);
-      setError("Failed to send invites. Please try again.");
+      if (err.response?.data?.error) {
+        setError(err.response.data.error);
+      } else {
+        setError("Failed to send invites. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -152,11 +204,11 @@ const TeamInvite = () => {
 
   // Get role options for select
   const getRoleOptions = () => {
-    // If we have loaded titles, use those
-    if (titles && titles.length > 0) {
-      return titles.map(title => (
-        <option key={title.id} value={title.id}>
-          {title.name}
+    // If we have loaded roles, use those
+    if (roles && roles.length > 0) {
+      return roles.map(role => (
+        <option key={role.id} value={role.id}>
+          {role.name}
         </option>
       ));
     }
@@ -186,6 +238,19 @@ const TeamInvite = () => {
     alertWarning: "bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4",
   };
 
+  // If checking organization status or needs setup, show loading
+  if (orgStatus.checking) {
+    return (
+      <div className={baseStyles.container}>
+        <div className="flex justify-center items-center h-64">
+          <p>Loading organization information...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If user needs organization setup, redirect handled in effect
+  
   return (
     <div className={baseStyles.container}>
       <h1 className={baseStyles.header}>Invite Team Members</h1>
@@ -205,49 +270,49 @@ const TeamInvite = () => {
         </div>
       )}
       
-      {/* Titles Setup Notice */}
-      {titlesError && (
+      {/* Roles Setup Notice */}
+      {rolesError && (
         <div className={baseStyles.alertWarning}>
           <p>
-            You haven't set up organization titles and roles yet. 
+            You haven't set up organization roles yet. 
             New team members will be invited as Admins by default.
           </p>
           <div className="mt-2">
             <button 
-              onClick={navigateToTitlesSetup}
+              onClick={navigateToRolesSetup}
               className="underline text-yellow-700 hover:text-yellow-800 mr-4"
             >
-              Set up titles and roles now
+              Set up roles now
             </button>
             <span>or</span>
             <Link
               to="/dashboard/team"
               className="underline text-yellow-700 hover:text-yellow-800 ml-4"
             >
-              Continue without setting up titles
+              Continue without setting up roles
             </Link>
           </div>
         </div>
       )}
       
-      {/* Title Management Section - Only show if titles are available */}
-      {titles.length > 0 && (
+      {/* Role Management Section - Only show if roles are available */}
+      {roles.length > 0 && (
         <div className={baseStyles.card}>
           <div className={baseStyles.cardHeader}>
-            <h3 className="text-lg font-medium">Available Team Titles</h3>
+            <h3 className="text-lg font-medium">Available Team Roles</h3>
           </div>
           <div className={baseStyles.cardBody}>
             <p className="mb-4">
-              These are the current titles in your organization. Team members will be assigned one of these titles.
+              These are the current roles in your organization. Team members will be assigned one of these roles.
             </p>
             
             <div className="flex flex-wrap gap-2 mb-4">
-              {titles.map((title) => (
+              {roles.map((role) => (
                 <div 
-                  key={title.id} 
+                  key={role.id} 
                   className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full"
                 >
-                  <span>{title.name}</span>
+                  <span>{role.name}</span>
                 </div>
               ))}
             </div>
@@ -255,10 +320,10 @@ const TeamInvite = () => {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={navigateToTitlesSetup}
+                onClick={navigateToRolesSetup}
                 className="text-blue-600 hover:text-blue-800"
               >
-                Manage Titles and Permissions
+                Manage Roles and Permissions
               </button>
             </div>
           </div>
@@ -321,7 +386,7 @@ const TeamInvite = () => {
                   {/* Role Field */}
                   <div>
                     <label htmlFor={`role-${index}`} className="block text-sm font-medium mb-1">
-                      {titles && titles.length > 0 ? 'Title' : 'Role'}
+                      {roles && roles.length > 0 ? 'Role' : 'Role'}
                     </label>
                     <select
                       id={`role-${index}`}
@@ -330,7 +395,7 @@ const TeamInvite = () => {
                       onChange={(e) => handleInputChange(index, e)}
                       className={baseStyles.select}
                     >
-                      {titlesLoading ? (
+                      {rolesLoading ? (
                         <option value="">Loading...</option>
                       ) : (
                         getRoleOptions()
