@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
+import * as Yup from 'yup';
+import { Formik, Form, Field, ErrorMessage } from 'formik';
 
 // Tab names for different settings sections
 const TABS = {
@@ -9,11 +11,32 @@ const TABS = {
   SECURITY: 'security'
 };
 
+const passwordValidationSchema = Yup.object({
+  email: Yup.string().email('Invalid email address').required('Email is required'),
+});
+
+const passwordChangeSchema = Yup.object({
+  otp: Yup.string()
+    .required('OTP is required')
+    .matches(/^\d{6}$/, 'OTP must be 6 digits'),
+  newPassword: Yup.string()
+    .required('New password is required')
+    .min(8, 'Password must be at least 8 characters'),
+  confirmPassword: Yup.string()
+    .required('Please confirm your password')
+    .oneOf([Yup.ref('newPassword')], 'Passwords must match'),
+});
+
 const Settings = () => {
-  const { token, currentUser, updateProfile } = useContext(AuthContext);
+  const { token, currentUser, updateProfile, resetPassword } = useContext(AuthContext);
   
   // State for current active tab
   const [activeTab, setActiveTab] = useState(TABS.PROFILE);
+  
+  // State for password change modal
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordChangeStep, setPasswordChangeStep] = useState(1);
+  const [requestSent, setRequestSent] = useState(false);
   
   // State for user profile
   const [profile, setProfile] = useState({
@@ -187,6 +210,53 @@ const Settings = () => {
       setError('Failed to update security settings. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  // Password reset handler (first step)
+  const handleRequestOTP = async (values, { setSubmitting, setErrors }) => {
+    try {
+      setError(null);
+      await resetPassword(values.email);
+      setPasswordChangeStep(2);
+      setRequestSent(true);
+    } catch (error) {
+      setError(error.message || 'An error occurred. Please try again.');
+      setErrors({ email: 'Failed to send OTP' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Password change handler (second step)
+  const handleChangePassword = async (values, { setSubmitting, setErrors }) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      
+      // Make API call to validate OTP and change password
+      await axios.post(`${API_URL}/auth/password-reset-confirm/`, {
+        email: profile.email,
+        otp: values.otp,
+        password: values.newPassword,
+      });
+      
+      setSuccess('Password changed successfully');
+      setShowPasswordModal(false);
+      setPasswordChangeStep(1);
+      setRequestSent(false);
+      
+      setTimeout(() => setSuccess(null), 3000);
+      
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setError('Failed to change password. Please check your OTP and try again.');
+      setErrors({ otp: 'Invalid OTP code' });
+    } finally {
+      setLoading(false);
+      setSubmitting(false);
     }
   };
   
@@ -459,7 +529,7 @@ const Settings = () => {
                     <button
                       type="button"
                       className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                      onClick={() => setSuccess('Password change feature would be shown here')}
+                      onClick={() => setShowPasswordModal(true)}
                     >
                       Change Password
                     </button>
@@ -480,6 +550,166 @@ const Settings = () => {
           </div>
         )}
       </div>
+
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 overflow-y-auto z-50">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                      Change Password
+                    </h3>
+                    <div className="mt-4">
+                      {passwordChangeStep === 1 ? (
+                        <Formik
+                          initialValues={{
+                            email: profile.email || '',
+                          }}
+                          validationSchema={passwordValidationSchema}
+                          onSubmit={handleRequestOTP}
+                        >
+                          {({ isSubmitting, errors, touched }) => (
+                            <Form className="space-y-6">
+                              <div>
+                                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                                  Email address
+                                </label>
+                                <Field
+                                  id="email"
+                                  name="email"
+                                  type="email"
+                                  autoComplete="email"
+                                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm ${errors.email && touched.email ? 'border-red-500' : ''}`}
+                                  disabled={true}
+                                />
+                                <ErrorMessage name="email" component="div" className="mt-1 text-sm text-red-600" />
+                                <p className="mt-1 text-sm text-gray-500">
+                                  We'll send a 6-digit OTP code to this email to verify your identity.
+                                </p>
+                              </div>
+
+                              <div>
+                                <button
+                                  type="submit"
+                                  disabled={isSubmitting || loading}
+                                  className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                                >
+                                  {isSubmitting || loading ? 'Sending OTP...' : 'Send OTP'}
+                                </button>
+                              </div>
+                            </Form>
+                          )}
+                        </Formik>
+                      ) : (
+                        <Formik
+                          initialValues={{
+                            otp: '',
+                            newPassword: '',
+                            confirmPassword: '',
+                          }}
+                          validationSchema={passwordChangeSchema}
+                          onSubmit={handleChangePassword}
+                        >
+                          {({ isSubmitting, errors, touched }) => (
+                            <Form className="space-y-6">
+                              <div>
+                                <div className="rounded-md bg-blue-50 p-4 mb-4">
+                                  <div className="flex">
+                                    <div className="flex-shrink-0">
+                                      <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                      </svg>
+                                    </div>
+                                    <div className="ml-3 flex-1 md:flex md:justify-between">
+                                      <p className="text-sm text-blue-700">
+                                        A 6-digit OTP has been sent to your email address.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                                  Enter OTP
+                                </label>
+                                <Field
+                                  id="otp"
+                                  name="otp"
+                                  type="text"
+                                  maxLength="6"
+                                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm ${errors.otp && touched.otp ? 'border-red-500' : ''}`}
+                                />
+                                <ErrorMessage name="otp" component="div" className="mt-1 text-sm text-red-600" />
+                              </div>
+
+                              <div>
+                                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+                                  New Password
+                                </label>
+                                <Field
+                                  id="newPassword"
+                                  name="newPassword"
+                                  type="password"
+                                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm ${errors.newPassword && touched.newPassword ? 'border-red-500' : ''}`}
+                                />
+                                <ErrorMessage name="newPassword" component="div" className="mt-1 text-sm text-red-600" />
+                              </div>
+
+                              <div>
+                                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                                  Confirm New Password
+                                </label>
+                                <Field
+                                  id="confirmPassword"
+                                  name="confirmPassword"
+                                  type="password"
+                                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm ${errors.confirmPassword && touched.confirmPassword ? 'border-red-500' : ''}`}
+                                />
+                                <ErrorMessage name="confirmPassword" component="div" className="mt-1 text-sm text-red-600" />
+                              </div>
+
+                              <div>
+                                <button
+                                  type="submit"
+                                  disabled={isSubmitting || loading}
+                                  className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                                >
+                                  {isSubmitting || loading ? 'Changing Password...' : 'Change Password'}
+                                </button>
+                              </div>
+                            </Form>
+                          )}
+                        </Formik>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordChangeStep(1);
+                    setRequestSent(false);
+                  }}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
