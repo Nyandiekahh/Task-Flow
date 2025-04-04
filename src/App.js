@@ -21,7 +21,6 @@ import Projects from './components/dashboard/Projects';
 import NewProject from './components/dashboard/NewProject';
 import ProjectDetails from './components/dashboard/ProjectDetails'; 
 import Team from './components/dashboard/Team';
-import TeamInvite from './components/dashboard/TeamInvite';
 import Calendar from './components/dashboard/Calendar';
 import Reports from './components/dashboard/Reports';
 import Settings from './components/dashboard/Settings';
@@ -98,7 +97,6 @@ function App() {
               
               {/* Team Routes */}
               <Route path="team" element={<Team />} />
-              <Route path="team/invite" element={<TeamInvite />} />
               
               {/* Organization Route */}
               <Route path="organization" element={<OrganizationDashboard />} />

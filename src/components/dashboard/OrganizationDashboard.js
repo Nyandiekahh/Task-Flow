@@ -268,15 +268,22 @@ const OrganizationDashboard = () => {
               <div className="px-6 py-5 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      {organization.logo ? (
-                        <img className="h-16 w-16 rounded-full" src={organization.logo} alt={organization.name} />
-                      ) : (
-                        <div className="h-16 w-16 bg-primary-100 text-primary-600 flex items-center justify-center rounded-full text-xl font-bold">
-                          {organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OR'}
-                        </div>
-                      )}
-                    </div>
+                  <div className="flex-shrink-0">
+  {(organization?.[0]?.logo || organization?.logo) ? (
+    <img 
+      className="h-16 w-16 rounded-full object-cover" 
+      src={organization?.[0]?.logo || organization?.logo} 
+      alt={organization?.[0]?.name || organization?.name || 'Organization Logo'} 
+    />
+  ) : (
+    <div className="h-16 w-16 bg-primary-100 text-primary-600 flex items-center justify-center rounded-full text-xl font-bold">
+      {organization?.[0]?.name ? 
+        organization[0].name.substring(0, 2).toUpperCase() : 
+        (organization?.name ? organization.name.substring(0, 2).toUpperCase() : 'OR')
+      }
+    </div>
+  )}
+</div>
                     <div className="ml-4">
                     <h1 className="text-2xl font-bold text-gray-900">{organization?.[0]?.name || organization?.name || 'Organization Name'}</h1>
                     <div className="flex items-center mt-1">
