@@ -27,6 +27,11 @@ const passwordChangeSchema = Yup.object({
     .oneOf([Yup.ref('newPassword')], 'Passwords must match'),
 });
 
+const titleSchema = Yup.object({
+  name: Yup.string().required('Title name is required'),
+  description: Yup.string()
+});
+
 const Settings = () => {
   const { token, currentUser, updateProfile, resetPassword } = useContext(AuthContext);
   
@@ -60,10 +65,19 @@ const Settings = () => {
     sessionTimeout: 30
   });
   
+  // State for titles
+  const [titles, setTitles] = useState([]);
+  const [titleModalOpen, setTitleModalOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(null);
+  
   // UI states
   const [loading, setLoading] = useState(true);
+  const [titlesLoading, setTitlesLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  
+  // API URL
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
   
   // Fetch settings data
   useEffect(() => {
@@ -71,7 +85,6 @@ const Settings = () => {
       try {
         setLoading(true);
         
-        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
         const headers = {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -96,6 +109,9 @@ const Settings = () => {
           console.error("Failed to load organization data:", orgError);
         }
         
+        // Fetch titles
+        await fetchTitles();
+        
         setError(null);
       } catch (err) {
         console.error('Error fetching settings:', err);
@@ -110,6 +126,27 @@ const Settings = () => {
     }
   }, [token, currentUser]);
   
+  // Fetch titles
+  const fetchTitles = async () => {
+    try {
+      setTitlesLoading(true);
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const response = await axios.get(`${API_URL}/titles/`, { headers });
+      setTitles(response.data);
+      
+    } catch (err) {
+      console.error('Error fetching titles:', err);
+      // Don't set main error for titles loading, just log it
+    } finally {
+      setTitlesLoading(false);
+    }
+  };
+  
   // Profile form handlers
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -123,7 +160,6 @@ const Settings = () => {
       setLoading(true);
       setError(null);
       
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -159,7 +195,6 @@ const Settings = () => {
       setLoading(true);
       setError(null);
       
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -194,7 +229,6 @@ const Settings = () => {
       setLoading(true);
       setError(null);
       
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -234,8 +268,6 @@ const Settings = () => {
       setLoading(true);
       setError(null);
       
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-      
       // Make API call to validate OTP and change password
       await axios.post(`${API_URL}/auth/password-reset-confirm/`, {
         email: profile.email,
@@ -257,6 +289,85 @@ const Settings = () => {
     } finally {
       setLoading(false);
       setSubmitting(false);
+    }
+  };
+  
+  // Title form handlers
+  const handleTitleSubmit = async (values, { setSubmitting, resetForm, setErrors }) => {
+    try {
+      setError(null);
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      if (editingTitle) {
+        // Update existing title
+        await axios.put(`${API_URL}/titles/${editingTitle.id}/`, values, { headers });
+        setSuccess('Title updated successfully');
+      } else {
+        // Create new title
+        await axios.post(`${API_URL}/titles/`, values, { headers });
+        setSuccess('Title created successfully');
+      }
+      
+      // Refresh titles list
+      fetchTitles();
+      
+      // Reset form and close modal
+      resetForm();
+      setTitleModalOpen(false);
+      setEditingTitle(null);
+      
+      setTimeout(() => setSuccess(null), 3000);
+      
+    } catch (err) {
+      console.error('Error saving title:', err);
+      setError('Failed to save title. Please try again.');
+      if (err.response && err.response.data) {
+        setErrors(err.response.data);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  
+  // Handle editing a title
+  const handleEditTitle = (title) => {
+    setEditingTitle(title);
+    setTitleModalOpen(true);
+  };
+  
+  // Handle deleting a title
+  const handleDeleteTitle = async (titleId) => {
+    if (!window.confirm('Are you sure you want to delete this title? This may affect team members with this title.')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      await axios.delete(`${API_URL}/titles/${titleId}/`, { headers });
+      
+      setSuccess('Title deleted successfully');
+      
+      // Refresh titles list
+      fetchTitles();
+      
+      setTimeout(() => setSuccess(null), 3000);
+      
+    } catch (err) {
+      console.error('Error deleting title:', err);
+      setError('Failed to delete title. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -419,64 +530,175 @@ const Settings = () => {
         
         {/* Organization Settings */}
         {activeTab === TABS.ORGANIZATION && (
-          <div className="bg-white shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Organization Settings</h3>
-              <form onSubmit={handleOrganizationSubmit}>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  <div className="col-span-1">
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">Organization Name</label>
-                    <input
-                      type="text"
-                      name="name"
-                      id="org-name"
-                      value={organization.name}
-                      onChange={handleOrganizationChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
+          <>
+            {/* Organization Details Form */}
+            <div className="bg-white shadow rounded-lg mb-6">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Organization Details</h3>
+                <form onSubmit={handleOrganizationSubmit}>
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="col-span-1">
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">Organization Name</label>
+                      <input
+                        type="text"
+                        name="name"
+                        id="org-name"
+                        value={organization.name}
+                        onChange={handleOrganizationChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      />
+                    </div>
+                    
+                    <div className="col-span-1">
+                      <label htmlFor="industry" className="block text-sm font-medium text-gray-700">Industry</label>
+                      <input
+                        type="text"
+                        name="industry"
+                        id="industry"
+                        value={organization.industry}
+                        onChange={handleOrganizationChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      />
+                    </div>
+                    
+                    <div className="col-span-1">
+                      <label htmlFor="size" className="block text-sm font-medium text-gray-700">Company Size</label>
+                      <select
+                        id="size"
+                        name="size"
+                        value={organization.size}
+                        onChange={handleOrganizationChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      >
+                        <option value="small">Small (1-10 employees)</option>
+                        <option value="medium">Medium (11-50 employees)</option>
+                        <option value="large">Large (51-200 employees)</option>
+                        <option value="enterprise">Enterprise (201+ employees)</option>
+                      </select>
+                    </div>
                   </div>
                   
-                  <div className="col-span-1">
-                    <label htmlFor="industry" className="block text-sm font-medium text-gray-700">Industry</label>
-                    <input
-                      type="text"
-                      name="industry"
-                      id="industry"
-                      value={organization.industry}
-                      onChange={handleOrganizationChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
-                  </div>
-                  
-                  <div className="col-span-1">
-                    <label htmlFor="size" className="block text-sm font-medium text-gray-700">Company Size</label>
-                    <select
-                      id="size"
-                      name="size"
-                      value={organization.size}
-                      onChange={handleOrganizationChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="submit"
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                      disabled={loading}
                     >
-                      <option value="small">Small (1-10 employees)</option>
-                      <option value="medium">Medium (11-50 employees)</option>
-                      <option value="large">Large (51-200 employees)</option>
-                      <option value="enterprise">Enterprise (201+ employees)</option>
-                    </select>
+                      {loading ? 'Saving...' : 'Save Changes'}
+                    </button>
                   </div>
-                </div>
-                
-                <div className="mt-6 flex justify-end">
+                </form>
+              </div>
+            </div>
+            
+            {/* Team Titles Management */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium leading-6 text-gray-900">Team Titles</h3>
                   <button
-                    type="submit"
-                    className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                    disabled={loading}
+                    type="button"
+                    onClick={() => {
+                      setEditingTitle(null);
+                      setTitleModalOpen(true);
+                    }}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
-                    {loading ? 'Saving...' : 'Save Changes'}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="-ml-0.5 mr-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Add Title
                   </button>
                 </div>
-              </form>
+                
+                <p className="text-sm text-gray-500 mb-6">
+                  Define titles for your team members. These titles will be available when inviting new team members.
+                </p>
+                
+                {/* Loading state for titles */}
+                {titlesLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Empty state */}
+                    {titles.length === 0 ? (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">No titles defined</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Get started by creating your first team title.
+                        </p>
+                        <div className="mt-6">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTitle(null);
+                              setTitleModalOpen(true);
+                            }}
+                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                            </svg>
+                            Create Title
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Titles list */
+                      <div className="bg-white shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Title
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Description
+                              </th>
+                              <th scope="col" className="relative px-6 py-3">
+                                <span className="sr-only">Actions</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {titles.map((title) => (
+                              <tr key={title.id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {title.name}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-500">
+                                  {title.description || <span className="text-gray-400 italic">No description</span>}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                  <button
+                                    onClick={() => handleEditTitle(title)}
+                                    className="text-primary-600 hover:text-primary-900 mr-4"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTitle(title.id)}
+                                    className="text-red-600 hover:text-red-900"
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
         
         {/* Security Settings */}
@@ -705,6 +927,96 @@ const Settings = () => {
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Title Modal (Add/Edit) */}
+      {titleModalOpen && (
+        <div className="fixed inset-0 overflow-y-auto z-50">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                      {editingTitle ? 'Edit Title' : 'Add New Title'}
+                    </h3>
+                    <div className="mt-4">
+                      <Formik
+                        initialValues={{
+                          name: editingTitle ? editingTitle.name : '',
+                          description: editingTitle ? editingTitle.description || '' : ''
+                        }}
+                        validationSchema={titleSchema}
+                        onSubmit={handleTitleSubmit}
+                      >
+                        {({ isSubmitting, errors, touched }) => (
+                          <Form className="space-y-6">
+                            <div>
+                              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                                Title Name
+                              </label>
+                              <Field
+                                id="name"
+                                name="name"
+                                type="text"
+                                className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm ${errors.name && touched.name ? 'border-red-500' : ''}`}
+                              />
+                              <ErrorMessage name="name" component="div" className="mt-1 text-sm text-red-600" />
+                            </div>
+
+                            <div>
+                              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                                Description
+                              </label>
+                              <Field
+                                as="textarea"
+                                id="description"
+                                name="description"
+                                rows={3}
+                                className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm ${errors.description && touched.description ? 'border-red-500' : ''}`}
+                                placeholder="Brief description of this role/title"
+                              />
+                              <ErrorMessage name="description" component="div" className="mt-1 text-sm text-red-600" />
+                            </div>
+
+                            <div className="flex justify-end space-x-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTitleModalOpen(false);
+                                  setEditingTitle(null);
+                                }}
+                                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                              >
+                                {isSubmitting ? 
+                                  (editingTitle ? 'Updating...' : 'Creating...') : 
+                                  (editingTitle ? 'Update Title' : 'Create Title')
+                                }
+                              </button>
+                            </div>
+                          </Form>
+                        )}
+                      </Formik>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

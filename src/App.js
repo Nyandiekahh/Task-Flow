@@ -19,12 +19,13 @@ import TaskDetail from './components/dashboard/TaskDetail';
 import NewTask from './components/dashboard/NewTask';
 import Projects from './components/dashboard/Projects';
 import NewProject from './components/dashboard/NewProject';
-import ProjectDetails from './components/dashboard/ProjectDetails'; // Import ProjectDetails component
+import ProjectDetails from './components/dashboard/ProjectDetails'; 
 import Team from './components/dashboard/Team';
 import TeamInvite from './components/dashboard/TeamInvite';
 import Calendar from './components/dashboard/Calendar';
 import Reports from './components/dashboard/Reports';
 import Settings from './components/dashboard/Settings';
+import OrganizationDashboard from './components/dashboard/OrganizationDashboard';
 
 // Onboarding Components
 import OnboardingLayout from './components/onboarding/OnboardingLayout';
@@ -92,12 +93,15 @@ function App() {
               {/* Projects Routes */}
               <Route path="projects" element={<Projects />} />
               <Route path="projects/new" element={<NewProject />} />
-              <Route path="projects/:id" element={<ProjectDetails />} /> {/* Add ProjectDetails route */}
-              <Route path="projects/:id/edit" element={<NewProject />} /> {/* Add project edit route */}
+              <Route path="projects/:id" element={<ProjectDetails />} />
+              <Route path="projects/:id/edit" element={<NewProject />} />
               
               {/* Team Routes */}
               <Route path="team" element={<Team />} />
               <Route path="team/invite" element={<TeamInvite />} />
+              
+              {/* Organization Route */}
+              <Route path="organization" element={<OrganizationDashboard />} />
               
               {/* Other Dashboard routes */}
               <Route path="calendar" element={<Calendar />} />
