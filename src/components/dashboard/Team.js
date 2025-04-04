@@ -172,64 +172,67 @@ const Team = () => {
     setInvites(updatedInvites);
   };
 
-  // Handle invite form submission
-  const handleInviteSubmit = async (e) => {
-    e.preventDefault();
+  // Handle invite form submission with OTP using existing endpoint
+const handleInviteSubmit = async (e) => {
+  e.preventDefault();
+  
+  // Validate emails
+  const isValid = invites.every(invite => {
+    if (!invite.email.trim()) return false;
+    // Simple email validation regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(invite.email);
+  });
+  
+  if (!isValid) {
+    setInviteError("Please enter valid email addresses for all team members.");
+    return;
+  }
+  
+  try {
+    setInviteLoading(true);
+    setInviteError(null);
     
-    // Validate emails
-    const isValid = invites.every(invite => {
-      if (!invite.email.trim()) return false;
-      // Simple email validation regex
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(invite.email);
-    });
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
     
-    if (!isValid) {
-      setInviteError("Please enter valid email addresses for all team members.");
-      return;
-    }
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
     
-    try {
-      setInviteLoading(true);
-      setInviteError(null);
-      
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-      
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-      
-      // Filter out any empty invites
-      const validInvites = invites.filter(invite => invite.email.trim() !== '');
-      
-      // Send invites to backend - UPDATED ENDPOINT
-      await axios.post(
-        `${API_URL}/auth/invite/`,
-        { invitations: validInvites },
-        { headers }
-      );
-      
-      setInviteSuccess(true);
-      // Clear form after successful submission
-      setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
-      
-      // Switch to the invitations tab to show the new invites
-      setActiveTab('invitations');
-      
-      // Reset success message after 2 seconds
-      setTimeout(() => {
-        setInviteSuccess(false);
-        setInviteModalOpen(false);
-      }, 2000);
-      
-    } catch (err) {
-      console.error("Error sending invites:", err);
-      setInviteError("Failed to send invites. Please try again.");
-    } finally {
-      setInviteLoading(false);
-    }
-  };
+    // Filter out any empty invites
+    const validInvites = invites.filter(invite => invite.email.trim() !== '');
+    
+    // Use existing endpoint but include a flag to indicate we want OTP
+    await axios.post(
+      `${API_URL}/auth/invite/`,
+      { 
+        invitations: validInvites,
+        use_otp: true  // Add this flag to indicate we want OTP instead of links
+      },
+      { headers }
+    );
+    
+    setInviteSuccess(true);
+    // Clear form after successful submission
+    setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
+    
+    // Switch to the invitations tab to show the new invites
+    setActiveTab('invitations');
+    
+    // Reset success message after 3 seconds
+    setTimeout(() => {
+      setInviteSuccess(false);
+      setInviteModalOpen(false);
+    }, 3000);
+    
+  } catch (err) {
+    console.error("Error sending invites:", err);
+    setInviteError("Failed to send invites. Please try again.");
+  } finally {
+    setInviteLoading(false);
+  }
+};
 
   // Get role options for select
   const getRoleOptions = () => {
@@ -575,7 +578,7 @@ const Team = () => {
           <PendingInvitations />
         )}
         
-        {/* Team Invite Modal */}
+        {/* Team Invite Modal - Updated for OTP */}
         {inviteModalOpen && (
           <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
             <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full m-4 max-h-90vh overflow-y-auto">
@@ -623,11 +626,28 @@ const Team = () => {
                         </svg>
                       </div>
                       <div className="ml-3">
-                        <p className="text-sm text-green-700">Invitations sent successfully! Redirecting to invitations tab...</p>
+                        <p className="text-sm text-green-700">
+                          <strong>Invitations sent successfully!</strong> Each user will receive an email with a one-time password (OTP) to complete registration.
+                        </p>
                       </div>
                     </div>
                   </div>
                 )}
+                
+                {/* Information about OTP-based invites */}
+                <div className="mb-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <h4 className="text-sm font-medium text-blue-700 mb-2">How Team Invitations Work</h4>
+                  <p className="text-sm text-blue-600 mb-2">
+                    When you invite a team member:
+                  </p>
+                  <ol className="list-decimal pl-4 text-sm text-blue-600 space-y-1">
+                    <li>They'll receive an email with a one-time password (OTP)</li>
+                    <li>They should go to the sign-in page and enter their email address</li>
+                    <li>The system will detect they're a new user and prompt for the OTP</li>
+                    <li>After verifying the OTP, they'll create their account</li>
+                    <li>For future sign-ins, they'll use their email and password</li>
+                  </ol>
+                </div>
                 
                 {/* Title Management Section - Only show if titles are available */}
                 {titles.length > 0 && (
@@ -653,7 +673,7 @@ const Team = () => {
                 <form onSubmit={handleInviteSubmit}>
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      Invite colleagues to join your organization. They will receive an email with instructions to set up their account.
+                      Invite colleagues to join your organization. They will receive an email with a one-time password to set up their account.
                     </p>
                     
                     {invites.map((invite, index) => (
@@ -757,7 +777,7 @@ const Team = () => {
                           </svg>
                           Sending...
                         </>
-                      ) : 'Send Invitations'}
+                      ) : 'Send OTP Invitations'}
                     </button>
                   </div>
                 </form>

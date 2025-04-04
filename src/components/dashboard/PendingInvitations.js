@@ -52,15 +52,16 @@ const PendingInvitations = () => {
         'Content-Type': 'application/json'
       };
       
+      // Add use_otp flag to request an OTP invitation
       await axios.post(
         `${API_URL}/auth/invitation/${invitationId}/resend/`,
-        {},
+        { use_otp: true },
         { headers }
       );
       
       setActionFeedback({
         type: 'success',
-        message: 'Invitation resent successfully!'
+        message: 'Invitation resent successfully! A one-time password (OTP) has been sent to the user.'
       });
       
       // Refresh the list
@@ -237,7 +238,7 @@ const PendingInvitations = () => {
                           </svg>
                           Resending...
                         </span>
-                      ) : 'Resend'}
+                      ) : 'Resend invitation'}
                     </button>
                     <button
                       onClick={() => handleDeleteInvitation(invitation.id)}
