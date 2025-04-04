@@ -19,13 +19,13 @@ const TeamInvite = () => {
   
   // Team members form state
   const [invites, setInvites] = useState([
-    { email: '', role: '', name: '' }
+    { email: '', title: '', name: '' }
   ]);
   
-  // State for roles from the system
-  const [roles, setRoles] = useState([]);
-  const [rolesLoading, setRolesLoading] = useState(true);
-  const [rolesError, setRolesError] = useState(null);
+  // State for titles from the system
+  const [titles, setTitles] = useState([]);
+  const [titlesLoading, setTitlesLoading] = useState(true);
+  const [titlesError, setTitlesError] = useState(null);
   
   // Check onboarding status when component mounts
   useEffect(() => {
@@ -67,16 +67,16 @@ const TeamInvite = () => {
     }
   }, [token, navigate]);
   
-  // Fetch roles when component mounts and org status is confirmed
+  // Fetch titles when component mounts and org status is confirmed
   useEffect(() => {
-    const fetchRoles = async () => {
+    const fetchTitles = async () => {
       if (!orgStatus.hasOrganization || orgStatus.checking) {
         return;
       }
       
       try {
-        setRolesLoading(true);
-        setRolesError(null);
+        setTitlesLoading(true);
+        setTitlesError(null);
         
         const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
         const headers = {
@@ -84,41 +84,41 @@ const TeamInvite = () => {
           'Content-Type': 'application/json'
         };
         
-        // Get roles from the API
-        const response = await axios.get(`${API_URL}/roles/roles/`, { headers });
-        setRoles(response.data);
+        // Get titles from the API
+        const response = await axios.get(`${API_URL}/titles/`, { headers });
+        setTitles(response.data);
         
-        // Update default role selection in forms if roles exist
+        // Update default title selection in forms if titles exist
         if (response.data.length > 0) {
           const updatedInvites = invites.map(invite => ({
             ...invite,
-            role: response.data[0].id // Set the first role as default
+            title: response.data[0].id // Set the first title as default
           }));
           setInvites(updatedInvites);
         }
         
       } catch (err) {
-        console.error("Error fetching roles:", err);
+        console.error("Error fetching titles:", err);
         if (err.response?.status === 404) {
-          setRolesError("Roles haven't been set up yet. Users will be invited as Admins.");
+          setTitlesError("Titles haven't been set up yet. Users will be invited without a specific title.");
         } else {
-          setRolesError("Failed to load roles. Users will be invited as Admins.");
+          setTitlesError("Failed to load titles. Users will be invited without a specific title.");
         }
       } finally {
-        setRolesLoading(false);
+        setTitlesLoading(false);
       }
     };
     
     if (token) {
-      fetchRoles();
+      fetchTitles();
     }
-  }, [token, invites, orgStatus]);
+  }, [token, orgStatus]);
 
   // Add another invite field
   const addInviteField = () => {
-    // Use the first role ID if available, otherwise empty
-    const defaultRole = roles.length > 0 ? roles[0].id : '';
-    setInvites([...invites, { email: '', role: defaultRole, name: '' }]);
+    // Use the first title ID if available, otherwise empty
+    const defaultTitle = titles.length > 0 ? titles[0].id : '';
+    setInvites([...invites, { email: '', title: defaultTitle, name: '' }]);
   };
 
   // Remove an invite field
@@ -139,9 +139,9 @@ const TeamInvite = () => {
     setInvites(updatedInvites);
   };
 
-  // Navigate to roles setup
-  const navigateToRolesSetup = () => {
-    navigate('/onboarding/roles');
+  // Navigate to titles setup
+  const navigateToTitlesSetup = () => {
+    navigate('/onboarding/titles');
   };
 
   // Handle form submission
@@ -175,7 +175,7 @@ const TeamInvite = () => {
       const validInvites = invites.filter(invite => invite.email.trim() !== '');
       
       // Send invites to backend
-      await axios.post(
+      const response = await axios.post(
         `${API_URL}/auth/invite/`,
         { invitations: validInvites },
         { headers }
@@ -183,7 +183,7 @@ const TeamInvite = () => {
       
       setSuccess(true);
       // Clear form after successful submission
-      setInvites([{ email: '', role: roles.length > 0 ? roles[0].id : '', name: '' }]);
+      setInvites([{ email: '', title: titles.length > 0 ? titles[0].id : '', name: '' }]);
       
       // Show success message for 3 seconds, then reset
       setTimeout(() => {
@@ -202,24 +202,24 @@ const TeamInvite = () => {
     }
   };
 
-  // Get role options for select
-  const getRoleOptions = () => {
-    // If we have loaded roles, use those
-    if (roles && roles.length > 0) {
-      return roles.map(role => (
-        <option key={role.id} value={role.id}>
-          {role.name}
+  // Get title options for select
+  const getTitleOptions = () => {
+    // If we have loaded titles, use those
+    if (titles && titles.length > 0) {
+      return titles.map(title => (
+        <option key={title.id} value={title.id}>
+          {title.name}
         </option>
       ));
     }
     
-    // Otherwise, just use Admin as default
+    // Otherwise, just use a default option
     return [
-      <option key="admin" value="admin">Admin</option>
+      <option key="default" value="">Select a Title</option>
     ];
   };
 
-  // Basic styling classes for use throughout the component
+  // Basic styling classes (unchanged)
   const baseStyles = {
     container: "w-full max-w-4xl mx-auto py-6",
     header: "text-2xl font-bold text-gray-900 mb-4",
@@ -249,13 +249,11 @@ const TeamInvite = () => {
     );
   }
   
-  // If user needs organization setup, redirect handled in effect
-  
   return (
     <div className={baseStyles.container}>
       <h1 className={baseStyles.header}>Invite Team Members</h1>
       <p className={baseStyles.subtext}>
-        Invite colleagues to join your organization with their appropriate roles.
+        Invite colleagues to join your organization with their appropriate titles.
       </p>
       
       {error && (
@@ -270,49 +268,49 @@ const TeamInvite = () => {
         </div>
       )}
       
-      {/* Roles Setup Notice */}
-      {rolesError && (
+      {/* Titles Setup Notice */}
+      {titlesError && (
         <div className={baseStyles.alertWarning}>
           <p>
-            You haven't set up organization roles yet. 
-            New team members will be invited as Admins by default.
+            You haven't set up organization titles yet. 
+            New team members will be invited without a specific title.
           </p>
           <div className="mt-2">
             <button 
-              onClick={navigateToRolesSetup}
+              onClick={navigateToTitlesSetup}
               className="underline text-yellow-700 hover:text-yellow-800 mr-4"
             >
-              Set up roles now
+              Set up titles now
             </button>
             <span>or</span>
             <Link
               to="/dashboard/team"
               className="underline text-yellow-700 hover:text-yellow-800 ml-4"
             >
-              Continue without setting up roles
+              Continue without setting up titles
             </Link>
           </div>
         </div>
       )}
       
-      {/* Role Management Section - Only show if roles are available */}
-      {roles.length > 0 && (
+      {/* Titles Management Section - Only show if titles are available */}
+      {titles.length > 0 && (
         <div className={baseStyles.card}>
           <div className={baseStyles.cardHeader}>
-            <h3 className="text-lg font-medium">Available Team Roles</h3>
+            <h3 className="text-lg font-medium">Available Team Titles</h3>
           </div>
           <div className={baseStyles.cardBody}>
             <p className="mb-4">
-              These are the current roles in your organization. Team members will be assigned one of these roles.
+              These are the current titles in your organization. Team members can be assigned these titles.
             </p>
             
             <div className="flex flex-wrap gap-2 mb-4">
-              {roles.map((role) => (
+              {titles.map((title) => (
                 <div 
-                  key={role.id} 
+                  key={title.id} 
                   className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full"
                 >
-                  <span>{role.name}</span>
+                  <span>{title.name}</span>
                 </div>
               ))}
             </div>
@@ -320,10 +318,10 @@ const TeamInvite = () => {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={navigateToRolesSetup}
+                onClick={navigateToTitlesSetup}
                 className="text-blue-600 hover:text-blue-800"
               >
-                Manage Roles and Permissions
+                Manage Titles
               </button>
             </div>
           </div>
@@ -383,22 +381,22 @@ const TeamInvite = () => {
                     />
                   </div>
                   
-                  {/* Role Field */}
+                  {/* Title Field */}
                   <div>
-                    <label htmlFor={`role-${index}`} className="block text-sm font-medium mb-1">
-                      {roles && roles.length > 0 ? 'Role' : 'Role'}
+                    <label htmlFor={`title-${index}`} className="block text-sm font-medium mb-1">
+                      {titles && titles.length > 0 ? 'Title' : 'Title'}
                     </label>
                     <select
-                      id={`role-${index}`}
-                      name="role"
-                      value={invite.role}
+                      id={`title-${index}`}
+                      name="title"
+                      value={invite.title}
                       onChange={(e) => handleInputChange(index, e)}
                       className={baseStyles.select}
                     >
-                      {rolesLoading ? (
+                      {titlesLoading ? (
                         <option value="">Loading...</option>
                       ) : (
-                        getRoleOptions()
+                        getTitleOptions()
                       )}
                     </select>
                   </div>
@@ -429,7 +427,7 @@ const TeamInvite = () => {
               type="submit"
               disabled={loading}
               className={baseStyles.primaryButton}
-            >
+              >
               {loading ? 'Sending...' : 'Send Invitations'}
             </button>
           </div>

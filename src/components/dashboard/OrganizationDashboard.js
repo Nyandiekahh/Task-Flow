@@ -2,93 +2,166 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
+import EditOrganizationModal from './EditOrganizationModal';
+import TitleModal from './TitleModal';
 
 const OrganizationDashboard = () => {
   const { token, currentUser } = useContext(AuthContext);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   
   // Organization data states
   const [organization, setOrganization] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [titles, setTitles] = useState([]);
-  const [roleStats, setRoleStats] = useState({});
+  const [roles, setRoles] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Edit modals state
+  const [editOrgModalOpen, setEditOrgModalOpen] = useState(false);
+  const [titleModalOpen, setTitleModalOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(null);
   
   // Stats for overview
   const [orgStats, setOrgStats] = useState({
     totalMembers: 0,
     activeMembers: 0,
     pendingInvitations: 0,
-    departmentsCount: 0
+    titlesCount: 0
   });
 
   useEffect(() => {
-    const fetchOrganizationData = async () => {
-      try {
-        setLoading(true);
-        
-        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Get organization data
-        const orgResponse = await axios.get(`${API_URL}/organizations/`, { headers });
-        setOrganization(orgResponse.data);
-        
-        // Get team members
-        const membersResponse = await axios.get(`${API_URL}/team-members/`, { headers });
-        setTeamMembers(membersResponse.data);
-        
-        // Get titles
-        const titlesResponse = await axios.get(`${API_URL}/titles/`, { headers });
-        setTitles(titlesResponse.data);
-        
-        // Get roles from the API
-        try {
-          const rolesResponse = await axios.get(`${API_URL}/roles/`, { headers });
-          
-          // Count team members by role
-          const roleCountMap = {};
-          membersResponse.data.forEach(member => {
-            if (member.role) {
-              roleCountMap[member.role] = (roleCountMap[member.role] || 0) + 1;
-            }
-          });
-          
-          setRoleStats(roleCountMap);
-        } catch (rolesError) {
-          console.error("Failed to load roles data:", rolesError);
-        }
-        
-        // Calculate organization stats
-        const totalMembers = membersResponse.data.length;
-        const activeMembers = membersResponse.data.filter(member => member.user).length;
-        const pendingMembers = totalMembers - activeMembers;
-        const uniqueTitles = new Set(membersResponse.data.map(member => member.title).filter(Boolean)).size;
-        
-        setOrgStats({
-          totalMembers,
-          activeMembers,
-          pendingInvitations: pendingMembers,
-          departmentsCount: uniqueTitles
-        });
-        
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching organization data:', err);
-        setError('Failed to load organization data. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    if (token) {
-      fetchOrganizationData();
-    }
+    fetchOrganizationData();
   }, [token]);
+  
+  const fetchOrganizationData = async () => {
+    try {
+      setLoading(true);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Get organization data
+      const orgResponse = await axios.get(`${API_URL}/organizations/`, { headers });
+      setOrganization(orgResponse.data);
+      
+      // Get team members
+      const membersResponse = await axios.get(`${API_URL}/team-members/`, { headers });
+      setTeamMembers(membersResponse.data);
+      
+      // Get titles
+      const titlesResponse = await axios.get(`${API_URL}/titles/`, { headers });
+      setTitles(titlesResponse.data);
+      
+      // Get roles
+      try {
+        const rolesResponse = await axios.get(`${API_URL}/roles/`, { headers });
+        setRoles(rolesResponse.data);
+      } catch (rolesError) {
+        console.error("Failed to load roles data:", rolesError);
+      }
+      
+      // Calculate organization stats
+      const totalMembers = membersResponse.data.length;
+      const activeMembers = membersResponse.data.filter(member => member.user).length;
+      const pendingMembers = totalMembers - activeMembers;
+      
+      setOrgStats({
+        totalMembers,
+        activeMembers,
+        pendingInvitations: pendingMembers,
+        titlesCount: titlesResponse.data.length
+      });
+      
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching organization data:', err);
+      setError('Failed to load organization data. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle organization update
+  const handleOrganizationUpdate = (updatedOrg) => {
+    setOrganization(updatedOrg);
+    setSuccess('Organization updated successfully');
+    setTimeout(() => setSuccess(null), 3000);
+  };
+  
+  // Handle save title (create or update)
+  const handleSaveTitle = async (formData) => {
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      let response;
+      
+      if (editingTitle) {
+        // Update existing title
+        response = await axios.put(
+          `${API_URL}/titles/${editingTitle.id}/`, 
+          formData,
+          { headers }
+        );
+        setSuccess('Title updated successfully');
+      } else {
+        // Create new title
+        response = await axios.post(
+          `${API_URL}/titles/`, 
+          formData,
+          { headers }
+        );
+        setSuccess('Title created successfully');
+      }
+      
+      // Refresh data
+      fetchOrganizationData();
+      setTimeout(() => setSuccess(null), 3000);
+      
+      return response.data;
+    } catch (err) {
+      console.error('Error saving title:', err);
+      throw new Error('Failed to save title');
+    }
+  };
+  
+  // Handle delete title
+  const handleDeleteTitle = async (titleId) => {
+    if (!window.confirm('Are you sure you want to delete this title? Team members with this title will be affected.')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      await axios.delete(`${API_URL}/titles/${titleId}/`, { headers });
+      
+      setSuccess('Title deleted successfully');
+      setTimeout(() => setSuccess(null), 3000);
+      
+      // Refresh data
+      fetchOrganizationData();
+    } catch (err) {
+      console.error('Error deleting title:', err);
+      setError('Failed to delete title. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Get status badge color
   const getStatusColor = (status) => {
@@ -104,13 +177,14 @@ const OrganizationDashboard = () => {
   
   // Format date to be more readable
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
   
   // Get avatar letters from name
   const getAvatarLetters = (name) => {
-    if (!name) return '??';
+    if (!name) return 'OR';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
   };
   
@@ -127,8 +201,21 @@ const OrganizationDashboard = () => {
       'bg-blue-600',
     ];
     
-    const index = name.charCodeAt(0) % colors.length;
+    const index = name ? name.charCodeAt(0) % colors.length : 0;
     return colors[index];
+  };
+  
+  // Get role names for a title
+  const getRoleNamesForTitle = (title) => {
+    if (!title.roles || !title.roles.length) return 'No assigned roles';
+    
+    return title.roles
+      .map(roleId => {
+        const role = roles.find(r => r.id === roleId);
+        return role ? role.name : null;
+      })
+      .filter(Boolean)
+      .join(', ');
   };
 
   return (
@@ -157,6 +244,22 @@ const OrganizationDashboard = () => {
           </div>
         )}
         
+        {/* Success message */}
+        {success && (
+          <div className="mb-6 bg-green-50 border-l-4 border-green-400 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-green-700">{success}</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Main content when data is loaded */}
         {!loading && !error && organization && (
           <>
@@ -175,29 +278,30 @@ const OrganizationDashboard = () => {
                       )}
                     </div>
                     <div className="ml-4">
-                      <h1 className="text-2xl font-bold text-gray-900">{organization.name}</h1>
-                      <div className="flex items-center mt-1">
-                        <span className="text-sm text-gray-500 mr-3">
-                          <span className="font-medium text-gray-900">Industry:</span> {organization.industry || 'Not specified'}
-                        </span>
-                        <span className="text-sm text-gray-500 mr-3">
-                          <span className="font-medium text-gray-900">Size:</span> {organization.size || 'Not specified'}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          <span className="font-medium text-gray-900">Created:</span> {formatDate(organization.created_at)}
-                        </span>
-                      </div>
+                    <h1 className="text-2xl font-bold text-gray-900">{organization?.[0]?.name || organization?.name || 'Organization Name'}</h1>
+                    <div className="flex items-center mt-1">
+  <span className="text-sm text-gray-500 mr-3">
+    <span className="font-medium text-gray-900">Industry:</span> {organization?.[0]?.industry || organization?.industry || 'Not specified'}
+  </span>
+  <span className="text-sm text-gray-500 mr-3">
+    <span className="font-medium text-gray-900">Size:</span> {organization?.[0]?.size || organization?.size || 'Not specified'}
+  </span>
+  <span className="text-sm text-gray-500">
+    <span className="font-medium text-gray-900">Created:</span> {organization?.[0]?.created_at ? formatDate(organization[0].created_at) : 'N/A'}
+  </span>
+</div>
                     </div>
                   </div>
                   <div>
-                    <Link to="/dashboard/settings">
-                      <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                        </svg>
-                        Edit Organization
-                      </button>
-                    </Link>
+                    <button 
+                      onClick={() => setEditOrgModalOpen(true)}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
+                      Edit Organization
+                    </button>
                   </div>
                 </div>
               </div>
@@ -282,7 +386,7 @@ const OrganizationDashboard = () => {
                     <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
                       <div className="sm:col-span-1">
                         <dt className="text-sm font-medium text-gray-500">Organization Name</dt>
-                        <dd className="mt-1 text-sm text-gray-900">{organization.name}</dd>
+                        <dd className="mt-1 text-sm text-gray-900">{organization.name || 'Not specified'}</dd>
                       </div>
                       <div className="sm:col-span-1">
                         <dt className="text-sm font-medium text-gray-500">Industry</dt>
@@ -340,11 +444,15 @@ const OrganizationDashboard = () => {
                     ) : (
                       <div className="text-center py-4">
                         <p className="text-sm text-gray-500">No job titles defined yet</p>
-                        <Link to="/dashboard/settings">
-                          <button className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                            Add Job Titles
-                          </button>
-                        </Link>
+                        <button
+                          onClick={() => {
+                            setEditingTitle(null);
+                            setTitleModalOpen(true);
+                          }}
+                          className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                        >
+                          Add Job Title
+                        </button>
                       </div>
                     )}
                   </div>
@@ -546,39 +654,80 @@ const OrganizationDashboard = () => {
                       Your organization has {titles.length} defined job titles
                     </p>
                   </div>
-                  <Link to="/dashboard/settings">
-                    <button className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="-ml-0.5 mr-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                      </svg>
-                      Manage Titles
-                    </button>
-                  </Link>
+                  <button
+                    onClick={() => {
+                      setEditingTitle(null);
+                      setTitleModalOpen(true);
+                    }}
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="-ml-0.5 mr-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Add Title
+                  </button>
                 </div>
                 <div className="px-4 py-5 sm:p-6">
                   {titles.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {titles.map((title) => {
-                        const memberCount = teamMembers.filter(m => m.title === title.name).length;
-                        return (
-                          <div key={title.id} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-                            <div className="px-4 py-5 sm:p-6">
-                              <h3 className="text-lg font-medium leading-6 text-gray-900">{title.name}</h3>
-                              <p className="mt-1 text-sm text-gray-500 h-12 overflow-hidden">
-                                {title.description || 'No description provided'}
-                              </p>
-                              <div className="mt-3 flex items-center justify-between">
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Title
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Description
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Roles
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Members
+                            </th>
+                            <th scope="col" className="relative px-6 py-3">
+                              <span className="sr-only">Actions</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {titles.map((title) => (
+                            <tr key={title.id}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {title.name}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500">
+                                {title.description || <span className="text-gray-400 italic">No description</span>}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-500">
+                                {getRoleNamesForTitle(title)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                  {teamMembers.filter(m => m.title === title.name).length} members
                                 </span>
-                                <span className="text-sm text-gray-500">
-                                  Created: {formatDate(title.created_at || organization.created_at)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button
+                                  onClick={() => {
+                                    setEditingTitle(title);
+                                    setTitleModalOpen(true);
+                                  }}
+                                  className="text-primary-600 hover:text-primary-900 mr-4"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTitle(title.id)}
+                                  className="text-red-600 hover:text-red-900"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
                     <div className="text-center py-8">
@@ -590,23 +739,46 @@ const OrganizationDashboard = () => {
                         Define job titles to better organize your team.
                       </p>
                       <div className="mt-6">
-                        <Link to="/dashboard/settings">
-                          <button
-                            type="button"
-                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                          >
-                            <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                            </svg>
-                            Add Job Title
-                          </button>
-                        </Link>
+                        <button
+                          onClick={() => {
+                            setEditingTitle(null);
+                            setTitleModalOpen(true);
+                          }}
+                          type="button"
+                          className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                        >
+                          <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                          </svg>
+                          Add Job Title
+                        </button>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
             )}
+
+            {/* Edit Organization Modal */}
+            <EditOrganizationModal
+              organization={organization}
+              isOpen={editOrgModalOpen}
+              onClose={() => setEditOrgModalOpen(false)}
+              onUpdate={handleOrganizationUpdate}
+              token={token}
+            />
+            
+            {/* Title Modal */}
+            <TitleModal
+              isOpen={titleModalOpen}
+              onClose={() => {
+                setTitleModalOpen(false);
+                setEditingTitle(null);
+              }}
+              onSave={handleSaveTitle}
+              title={editingTitle}
+              token={token}
+            />
           </>
         )}
       </div>
