@@ -51,9 +51,9 @@ export const AuthProvider = ({ children }) => {
       // Create userData object with the correct field names
       const userData = {
         email: email,
-        name: name,           // Changed from username to name
+        name: name,
         password: password,
-        confirm_password: password // Changed from password2 to confirm_password
+        confirm_password: password
       };
       
       console.log('Registration payload:', userData);
@@ -181,6 +181,93 @@ export const AuthProvider = ({ children }) => {
       throw error;
     }
   }, []);
+
+  // Verify OTP for team member first login
+  const verifyOtp = useCallback(async (email, otp) => {
+    setError(null);
+    try {
+      const response = await authAPI.verifyOtp(email, otp);
+      
+      // Store temp token if provided
+      if (response && response.temp_token) {
+        localStorage.setItem('temp_token', response.temp_token);
+      }
+      
+      return response;
+    } catch (error) {
+      setError(error.message || 'Invalid OTP. Please try again.');
+      throw error;
+    }
+  }, []);
+  
+  // Set password with OTP for first-time login
+  const setPasswordWithOtp = useCallback(async (email, newPassword, tempToken) => {
+    setError(null);
+    try {
+      const response = await authAPI.setPasswordWithOtp(email, newPassword, tempToken);
+      
+      // Remove temp token if it exists
+      localStorage.removeItem('temp_token');
+      
+      // Store permanent tokens
+      if (response.access) {
+        localStorage.setItem('token', response.access);
+        setToken(response.access);
+      }
+      if (response.refresh) {
+        localStorage.setItem('refreshToken', response.refresh);
+      }
+      
+      // Set current user from the response
+      if (response.user) {
+        setCurrentUser(response.user);
+      }
+      
+      return response;
+    } catch (error) {
+      setError(error.message || 'Failed to set password. Please try again.');
+      throw error;
+    }
+  }, []);
+  
+  // Accept invitation and set password
+  const acceptInvitation = useCallback(async (token, password) => {
+    setError(null);
+    try {
+      const response = await authAPI.acceptInvitation(token, password);
+      
+      // Store tokens
+      if (response.access) {
+        localStorage.setItem('token', response.access);
+        setToken(response.access);
+      }
+      if (response.refresh) {
+        localStorage.setItem('refreshToken', response.refresh);
+      }
+      
+      // Set current user from the response
+      if (response.user) {
+        setCurrentUser(response.user);
+      }
+      
+      return response;
+    } catch (error) {
+      setError(error.message || 'Failed to accept invitation. Please try again.');
+      throw error;
+    }
+  }, []);
+  
+  // Send invitation with OTP to team member
+  const sendTeamInvite = useCallback(async (email, role, title) => {
+    setError(null);
+    try {
+      const response = await authAPI.sendTeamInvite(email, role, title);
+      return response;
+    } catch (error) {
+      setError(error.message || 'Failed to send invitation. Please try again.');
+      throw error;
+    }
+  }, []);
   
   // Context value
   const value = {
@@ -194,7 +281,11 @@ export const AuthProvider = ({ children }) => {
     refreshToken,
     resetPassword,
     confirmPasswordReset,
-    updateProfile
+    updateProfile,
+    verifyOtp,
+    setPasswordWithOtp,
+    sendTeamInvite,
+    acceptInvitation
   };
   
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

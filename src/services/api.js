@@ -82,6 +82,39 @@ export const authAPI = {
     const response = await api.post('/auth/token/refresh/', { refresh: refreshToken });
     return response.data;
   },
+
+  verifyOtp: async (email, otp) => {
+    const response = await api.post('/auth/verify-otp/', { email, otp });
+    return response.data;
+  },
+
+  acceptInvitation: async (token, password) => {
+    const response = await api.post(`/auth/accept-invitation/${token}/`, {
+      password: password
+    });
+    return response.data;
+  },
+
+  setPasswordWithOtp: async (email, newPassword, tempToken) => {
+    // If tempToken is provided, use it in headers
+    const headers = tempToken ? { Authorization: `Bearer ${tempToken}` } : {};
+    
+    const response = await api.post('/auth/set-password/', 
+      { email, new_password: newPassword },
+      { headers }
+    );
+    return response.data;
+  },
+
+  sendTeamInvite: async (email, role, title) => {
+    const response = await api.post('/auth/send-invite/', { 
+      email, 
+      role, 
+      title,
+      use_otp: true // Always use OTP for invitations
+    });
+    return response.data;
+  }
 };
 
 // Organization API service

@@ -7,6 +7,7 @@ import SignIn from './components/auth/SignIn';
 import SignUp from './components/auth/SignUp';
 import ResetPassword from './components/auth/ResetPassword';
 import ResetPasswordConfirm from './components/auth/ResetPasswordConfirm';
+import OtpVerification from './components/auth/OtpVerification';
 
 // Landing Components
 import Landing from './components/landing/Landing';
@@ -62,6 +63,7 @@ function App() {
             <Route path="/signup" element={<SignUp />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/reset-password-confirm" element={<ResetPasswordConfirm />} />
+            <Route path="/verify-otp" element={<OtpVerification />} />
             
             {/* Onboarding Routes */}
             <Route path="/onboarding" element={
