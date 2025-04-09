@@ -49,10 +49,20 @@ const OtpVerification = () => {
       // Call API to verify OTP
       const response = await verifyOtp(values.email, values.otp);
       
-      // Store email and invitation token for the password change step
+      // Store email for the password change step
       setEmail(values.email);
+      
+      // Extract token from the response
+      // The backend returns the token in the response.token property
+      // or as part of the invitation object
       if (response && response.token) {
         setInvitationToken(response.token);
+      } else if (response && response.invitation && response.invitation.token) {
+        setInvitationToken(response.invitation.token);
+      } else {
+        console.log('Response data:', response);
+        setApiError('Could not retrieve invitation token from response');
+        return;
       }
       
       // Show success message
@@ -73,6 +83,8 @@ const OtpVerification = () => {
     try {
       setApiError(null);
       setSuccessMessage(null);
+      
+      console.log('Submitting with token:', invitationToken);
       
       // Call API to accept invitation with new password
       await acceptInvitation(invitationToken, values.password);

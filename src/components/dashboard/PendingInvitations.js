@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 
-const PendingInvitations = () => {
+const PendingInvitations = ({ onInvitationAccepted, lastRefresh }) => {
   const { token } = useContext(AuthContext);
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,11 +11,8 @@ const PendingInvitations = () => {
   const [deleteLoading, setDeleteLoading] = useState({});
   const [actionFeedback, setActionFeedback] = useState(null);
 
-  useEffect(() => {
-    fetchPendingInvitations();
-  }, [token]);
-
-  const fetchPendingInvitations = async () => {
+  // Convert to useCallback for dependency tracking
+  const fetchPendingInvitations = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -39,7 +36,65 @@ const PendingInvitations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  // Initial fetch and when token changes
+  useEffect(() => {
+    if (token) {
+      fetchPendingInvitations();
+    }
+  }, [token, fetchPendingInvitations]);
+
+  // Additional effect to refresh when lastRefresh signal changes
+  useEffect(() => {
+    if (token && lastRefresh) {
+      fetchPendingInvitations();
+    }
+  }, [token, lastRefresh, fetchPendingInvitations]);
+
+  // Instead of periodic checking, we'll implement a check on refresh button click
+  // and when the component is focused or becomes visible
+  
+  // This function checks if any invitations have been accepted
+  const checkInvitationStatus = useCallback(async () => {
+    if (!token || pendingInvitations.length === 0) return;
+    
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const currentResponse = await axios.get(
+        `${API_URL}/auth/invitations/`,
+        { headers }
+      );
+      
+      // Check if any invitations are no longer in the list (accepted)
+      const currentIds = new Set(currentResponse.data.map(inv => inv.id));
+      const completedInvitations = pendingInvitations.filter(inv => !currentIds.has(inv.id));
+      
+      if (completedInvitations.length > 0) {
+        // Update local state
+        setPendingInvitations(currentResponse.data);
+        
+        // Notify parent component that invitations were accepted
+        if (onInvitationAccepted) {
+          onInvitationAccepted();
+        }
+      }
+    } catch (error) {
+      console.error("Error checking invitation status:", error);
+    }
+  }, [token, pendingInvitations, onInvitationAccepted]);
+  
+  // Check invitation status when the component mounts and when lastRefresh changes
+  useEffect(() => {
+    if (token) {
+      checkInvitationStatus();
+    }
+  }, [token, lastRefresh, checkInvitationStatus]);
 
   const handleResendInvitation = async (invitationId) => {
     try {
@@ -283,7 +338,7 @@ const PendingInvitations = () => {
           </p>
           <div className="mt-6">
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => fetchPendingInvitations()}
               className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             >
               Refresh

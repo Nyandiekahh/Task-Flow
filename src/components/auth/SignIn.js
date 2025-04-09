@@ -152,6 +152,16 @@ const SignIn = () => {
             )}
           </Formik>
 
+          {/* Add OTP verification option */}
+          <div className="mt-4 text-center">
+            <p className="text-sm text-secondary-600">
+              Received an invitation with an OTP?{' '}
+              <Link to="/verify-otp" className="font-medium text-primary-600 hover:text-primary-500">
+                Sign in with OTP
+              </Link>
+            </p>
+          </div>
+
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">

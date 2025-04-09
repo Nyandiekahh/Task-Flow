@@ -88,133 +88,151 @@ const DashboardHome = () => {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch organization data
-        try {
-          const orgData = await organizationAPI.getOrganization();
-          setOrganization(orgData);
-        } catch (orgError) {
-          console.error("Error fetching organization:", orgError);
-        }
-        
-        // Fetch encouragements if you have an API endpoint for them
-        try {
-          const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-          const token = localStorage.getItem('token');
-          const headers = {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          };
-          
-          // Uncomment this if you add an encouragements endpoint
-          // const encouragementsResponse = await axios.get(`${API_URL}/encouragements/`, { headers });
-          // setEncouragements(encouragementsResponse.data);
-        } catch (encError) {
-          console.error("Error fetching encouragements:", encError);
-          // Fallback to default encouragements
-        }
-        
-        // Fetch titles for the invite form - Added from Team component
-        try {
-          setTitlesLoading(true);
-          const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-          const token = localStorage.getItem('token');
-          const headers = {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          };
-          
-          const titlesResponse = await axios.get(`${API_URL}/titles/`, { headers });
-          setTitles(titlesResponse.data);
-          
-          // Update default role selection in forms if titles exist
-          if (titlesResponse.data.length > 0) {
-            setInvites(invites.map(invite => ({
-              ...invite,
-              role: titlesResponse.data[0].id
-            })));
-          }
-        } catch (titlesError) {
-          console.error("Failed to load titles:", titlesError);
-        } finally {
-          setTitlesLoading(false);
-        }
-        
-        // Fetch task data
-        try {
-          const tasksData = await taskAPI.getTasks();
-          
-          // Set recent tasks (latest 3)
-          const sortedTasks = [...tasksData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-          setRecentTasks(sortedTasks.slice(0, 3));
-          
-          // Calculate stats
-          const totalTasks = tasksData.length;
-          const completedTasks = tasksData.filter(task => task.status === 'completed' || task.status === 'approved').length;
-          const inProgressTasks = tasksData.filter(task => task.status === 'in_progress').length;
-          
-          // Calculate overdue tasks
-          const today = new Date();
-          const overdueTasks = tasksData.filter(task => {
-            if (!task.due_date) return false;
-            const dueDate = new Date(task.due_date);
-            return dueDate < today && task.status !== 'completed' && task.status !== 'approved';
-          }).length;
-          
-          setStats([
-            { id: 1, name: 'Total Tasks', value: totalTasks.toString(), icon: 'task', bgColor: 'bg-primary-100', textColor: 'text-primary-600' },
-            { id: 2, name: 'Completed', value: completedTasks.toString(), icon: 'check', bgColor: 'bg-success-100', textColor: 'text-success-600' },
-            { id: 3, name: 'In Progress', value: inProgressTasks.toString(), icon: 'clock', bgColor: 'bg-warning-100', textColor: 'text-warning-600' },
-            { id: 4, name: 'Overdue', value: overdueTasks.toString(), icon: 'alert', bgColor: 'bg-danger-100', textColor: 'text-danger-600' },
-          ]);
-        } catch (taskError) {
-          console.error("Error fetching tasks:", taskError);
-          setError("Failed to load task data.");
-        }
-        
-        // Fetch projects data
-        try {
-          const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-          const token = localStorage.getItem('token');
-          const headers = {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          };
-          
-          const projectsResponse = await axios.get(`${API_URL}/projects/`, { headers });
-          
-          // Map projects to include progress percentages
-          const projectsWithProgress = projectsResponse.data.map(project => {
-            // Calculate progress if not provided by the API
-            const totalTasks = project.total_tasks || 0;
-            const completedTasks = project.completed_tasks || 0;
-            const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-            
-            return {
-              ...project,
-              progress: progress,
-              tasks: totalTasks,
-              completedTasks: completedTasks
-            };
-          });
-          
-          setProjects(projectsWithProgress);
-        } catch (projectError) {
-          console.error("Error fetching projects:", projectError);
-          // Don't set error here to allow partial dashboard to load
-        }
-        
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-        setError("There was a problem loading your dashboard data.");
-      } finally {
-        setLoading(false);
+    // Modified fetchData function in DashboardHome.js
+const fetchData = async () => {
+  try {
+    setLoading(true);
+    
+    // Fetch organization data
+    try {
+      const orgData = await organizationAPI.getOrganization();
+      setOrganization(orgData);
+    } catch (orgError) {
+      console.error("Error fetching organization:", orgError);
+    }
+    
+    // Fetch encouragements if you have an API endpoint for them
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Uncomment this if you add an encouragements endpoint
+      // const encouragementsResponse = await axios.get(`${API_URL}/encouragements/`, { headers });
+      // setEncouragements(encouragementsResponse.data);
+    } catch (encError) {
+      console.error("Error fetching encouragements:", encError);
+      // Fallback to default encouragements
+    }
+    
+    // Fetch titles for the invite form - Added from Team component
+    try {
+      setTitlesLoading(true);
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const titlesResponse = await axios.get(`${API_URL}/titles/`, { headers });
+      setTitles(titlesResponse.data);
+      
+      // Update default role selection in forms if titles exist
+      if (titlesResponse.data.length > 0) {
+        setInvites(invites.map(invite => ({
+          ...invite,
+          role: titlesResponse.data[0].id
+        })));
       }
-    };
-
+    } catch (titlesError) {
+      console.error("Failed to load titles:", titlesError);
+    } finally {
+      setTitlesLoading(false);
+    }
+    
+    // Fetch task data
+    try {
+      const tasksData = await taskAPI.getTasks();
+      
+      // Set recent tasks (latest 3)
+      const sortedTasks = [...tasksData].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setRecentTasks(sortedTasks.slice(0, 3));
+      
+      // Calculate stats
+      const totalTasks = tasksData.length;
+      const completedTasks = tasksData.filter(task => task.status === 'completed' || task.status === 'approved').length;
+      const inProgressTasks = tasksData.filter(task => task.status === 'in_progress').length;
+      
+      // Calculate overdue tasks
+      const today = new Date();
+      const overdueTasks = tasksData.filter(task => {
+        if (!task.due_date) return false;
+        const dueDate = new Date(task.due_date);
+        return dueDate < today && task.status !== 'completed' && task.status !== 'approved';
+      }).length;
+      
+      setStats([
+        { id: 1, name: 'Total Tasks', value: totalTasks.toString(), icon: 'task', bgColor: 'bg-primary-100', textColor: 'text-primary-600' },
+        { id: 2, name: 'Completed', value: completedTasks.toString(), icon: 'check', bgColor: 'bg-success-100', textColor: 'text-success-600' },
+        { id: 3, name: 'In Progress', value: inProgressTasks.toString(), icon: 'clock', bgColor: 'bg-warning-100', textColor: 'text-warning-600' },
+        { id: 4, name: 'Overdue', value: overdueTasks.toString(), icon: 'alert', bgColor: 'bg-danger-100', textColor: 'text-danger-600' },
+      ]);
+    } catch (taskError) {
+      console.error("Error fetching tasks:", taskError);
+      
+      // Handle 403 Forbidden error specifically
+      if (taskError.response && taskError.response.status === 403) {
+        console.log("Handling 403 error gracefully for tasks");
+        // Show empty task data
+        setRecentTasks([]);
+        setStats([
+          { id: 1, name: 'Total Tasks', value: '0', icon: 'task', bgColor: 'bg-primary-100', textColor: 'text-primary-600' },
+          { id: 2, name: 'Completed', value: '0', icon: 'check', bgColor: 'bg-success-100', textColor: 'text-success-600' },
+          { id: 3, name: 'In Progress', value: '0', icon: 'clock', bgColor: 'bg-warning-100', textColor: 'text-warning-600' },
+          { id: 4, name: 'Overdue', value: '0', icon: 'alert', bgColor: 'bg-danger-100', textColor: 'text-danger-600' },
+        ]);
+      } else {
+        setError("Failed to load task data.");
+      }
+    }
+    
+    // Fetch projects data
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const projectsResponse = await axios.get(`${API_URL}/projects/`, { headers });
+      
+      // Map projects to include progress percentages
+      const projectsWithProgress = projectsResponse.data.map(project => {
+        // Calculate progress if not provided by the API
+        const totalTasks = project.total_tasks || 0;
+        const completedTasks = project.completed_tasks || 0;
+        const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        
+        return {
+          ...project,
+          progress: progress,
+          tasks: totalTasks,
+          completedTasks: completedTasks
+        };
+      });
+      
+      setProjects(projectsWithProgress);
+    } catch (projectError) {
+      console.error("Error fetching projects:", projectError);
+      // Handle 403 errors gracefully
+      if (projectError.response && projectError.response.status === 403) {
+        setProjects([]);
+      }
+      // Don't set error here to allow partial dashboard to load
+    }
+    
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error);
+    setError("There was a problem loading your dashboard data.");
+  } finally {
+    setLoading(false);
+  }
+};
     // Get the token from localStorage
     const token = localStorage.getItem('token');
     if (token) {

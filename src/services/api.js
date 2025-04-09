@@ -89,7 +89,7 @@ export const authAPI = {
   },
 
   acceptInvitation: async (token, password) => {
-    const response = await api.post(`/auth/accept-invitation/${token}/`, {
+    const response = await api.post(`/auth/invitation/${token}/`, {
       password: password
     });
     return response.data;

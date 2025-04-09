@@ -173,66 +173,66 @@ const Team = () => {
   };
 
   // Handle invite form submission with OTP using existing endpoint
-const handleInviteSubmit = async (e) => {
-  e.preventDefault();
-  
-  // Validate emails
-  const isValid = invites.every(invite => {
-    if (!invite.email.trim()) return false;
-    // Simple email validation regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(invite.email);
-  });
-  
-  if (!isValid) {
-    setInviteError("Please enter valid email addresses for all team members.");
-    return;
-  }
-  
-  try {
-    setInviteLoading(true);
-    setInviteError(null);
+  const handleInviteSubmit = async (e) => {
+    e.preventDefault();
     
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+    // Validate emails
+    const isValid = invites.every(invite => {
+      if (!invite.email.trim()) return false;
+      // Simple email validation regex
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(invite.email);
+    });
     
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
+    if (!isValid) {
+      setInviteError("Please enter valid email addresses for all team members.");
+      return;
+    }
     
-    // Filter out any empty invites
-    const validInvites = invites.filter(invite => invite.email.trim() !== '');
-    
-    // Use existing endpoint but include a flag to indicate we want OTP
-    await axios.post(
-      `${API_URL}/auth/invite/`,
-      { 
-        invitations: validInvites,
-        use_otp: true  // Add this flag to indicate we want OTP instead of links
-      },
-      { headers }
-    );
-    
-    setInviteSuccess(true);
-    // Clear form after successful submission
-    setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
-    
-    // Switch to the invitations tab to show the new invites
-    setActiveTab('invitations');
-    
-    // Reset success message after 3 seconds
-    setTimeout(() => {
-      setInviteSuccess(false);
-      setInviteModalOpen(false);
-    }, 3000);
-    
-  } catch (err) {
-    console.error("Error sending invites:", err);
-    setInviteError("Failed to send invites. Please try again.");
-  } finally {
-    setInviteLoading(false);
-  }
-};
+    try {
+      setInviteLoading(true);
+      setInviteError(null);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Filter out any empty invites
+      const validInvites = invites.filter(invite => invite.email.trim() !== '');
+      
+      // Use existing endpoint but include a flag to indicate we want OTP
+      await axios.post(
+        `${API_URL}/auth/invite/`,
+        { 
+          invitations: validInvites,
+          use_otp: true  // Add this flag to indicate we want OTP instead of links
+        },
+        { headers }
+      );
+      
+      setInviteSuccess(true);
+      // Clear form after successful submission
+      setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
+      
+      // Switch to the invitations tab to show the new invites
+      setActiveTab('invitations');
+      
+      // Reset success message after 3 seconds
+      setTimeout(() => {
+        setInviteSuccess(false);
+        setInviteModalOpen(false);
+      }, 3000);
+      
+    } catch (err) {
+      console.error("Error sending invites:", err);
+      setInviteError("Failed to send invites. Please try again.");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
 
   // Get role options for select
   const getRoleOptions = () => {
@@ -404,7 +404,12 @@ const handleInviteSubmit = async (e) => {
                           {member.avatar}
                         </div>
                         <div className="ml-4">
-                          <h3 className="text-lg font-medium text-gray-900">{member.name}</h3>
+                          <Link 
+                            to={`/dashboard/team/${member.id}`} 
+                            className="text-lg font-medium text-gray-900 hover:text-primary-600"
+                          >
+                            {member.name}
+                          </Link>
                           <p className="text-sm text-gray-500">{member.title || 'No title'}</p>
                         </div>
                       </div>
@@ -431,8 +436,18 @@ const handleInviteSubmit = async (e) => {
                       </div>
                     </div>
                     <div className="bg-gray-50 px-6 py-3 flex justify-between border-t border-gray-200">
-                      <button className="text-sm text-gray-600 hover:text-gray-900">View Profile</button>
-                      <button className="text-sm text-primary-600 hover:text-primary-700">Edit</button>
+                      <Link 
+                        to={`/dashboard/team/${member.id}`} 
+                        className="text-sm text-gray-600 hover:text-primary-600"
+                      >
+                        View Profile
+                      </Link>
+                      <Link 
+                        to={`/dashboard/team/edit/${member.id}`} 
+                        className="text-sm text-primary-600 hover:text-primary-700"
+                      >
+                        Edit
+                      </Link>
                     </div>
                   </div>
                 ))}
@@ -472,7 +487,12 @@ const handleInviteSubmit = async (e) => {
                                 {member.avatar}
                               </div>
                               <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">{member.name}</div>
+                                <Link 
+                                  to={`/dashboard/team/${member.id}`} 
+                                  className="text-sm font-medium text-gray-900 hover:text-primary-600"
+                                >
+                                  {member.name}
+                                </Link>
                                 <div className="text-sm text-gray-500">{member.email}</div>
                               </div>
                             </div>
@@ -489,12 +509,18 @@ const handleInviteSubmit = async (e) => {
                             {new Date(member.joinedDate).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button className="text-primary-600 hover:text-primary-900 mr-4">
+                            <Link 
+                              to={`/dashboard/team/${member.id}`} 
+                              className="text-primary-600 hover:text-primary-900 mr-4"
+                            >
                               View
-                            </button>
-                            <button className="text-gray-600 hover:text-gray-900">
+                            </Link>
+                            <Link 
+                              to={`/dashboard/team/edit/${member.id}`} 
+                              className="text-gray-600 hover:text-gray-900"
+                            >
                               Edit
-                            </button>
+                            </Link>
                           </td>
                         </tr>
                       ))}
