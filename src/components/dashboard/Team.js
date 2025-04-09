@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../../context/AuthContext';
-import axios from 'axios';
 import PendingInvitations from './PendingInvitations';
 
 const Team = () => {
@@ -24,84 +22,162 @@ const Team = () => {
   const [inviteError, setInviteError] = useState(null);
   const [inviteLoading, setInviteLoading] = useState(false);
   
-  // Team members form state for invites
-  const [invites, setInvites] = useState([
-    { email: '', role: 'admin', name: '' }
-  ]);
-  
   // State for titles from the system
   const [titles, setTitles] = useState([]);
   const [titlesLoading, setTitlesLoading] = useState(false);
   
+  // State for available permissions
+  const [availablePermissions, setAvailablePermissions] = useState([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
+  
+  // State for title management
+  const [showTitleModal, setShowTitleModal] = useState(false);
+  const [newTitle, setNewTitle] = useState({ name: '', description: '', permissions: [] });
+  const [titleSaving, setTitleSaving] = useState(false);
+  const [titleError, setTitleError] = useState(null);
+  
+  // Team members form state for invites
+  const [invites, setInvites] = useState([
+    { email: '', role: '', name: '' }
+  ]);
+  
   // Fetch team members
-  useEffect(() => {
-    const fetchTeamMembers = async () => {
+  const fetchTeamMembers = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Get team members
+      const response = await fetch(`${API_URL}/team-members/`, { 
+        method: 'GET',
+        headers 
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch team members');
+      }
+      
+      const data = await response.json();
+      
+      // Get roles for filter options
       try {
-        setLoading(true);
+        const rolesResponse = await fetch(`${API_URL}/roles/`, { 
+          method: 'GET',
+          headers 
+        });
         
-        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
-        
-        // Get team members
-        const response = await axios.get(`${API_URL}/team-members/`, { headers });
-        
-        // Get roles for filter options
-        try {
-          const rolesResponse = await axios.get(`${API_URL}/roles/`, { headers });
-          const roleNames = ['All', ...new Set(rolesResponse.data.map(role => role.name))];
+        if (rolesResponse.ok) {
+          const rolesData = await rolesResponse.json();
+          const roleNames = ['All', ...new Set(rolesData.map(role => role.name))];
           setRoles(roleNames);
-        } catch (rolesError) {
-          console.error("Failed to load roles:", rolesError);
+        } else {
+          console.error("Failed to load roles: Server responded with status", rolesResponse.status);
         }
+      } catch (rolesError) {
+        console.error("Failed to load roles:", rolesError);
+      }
+      
+      // Get titles for the invite form
+      try {
+        setTitlesLoading(true);
+        const titlesResponse = await fetch(`${API_URL}/titles/`, { 
+          method: 'GET',
+          headers 
+        });
         
-        // Get titles for the invite form
-        try {
-          setTitlesLoading(true);
-          const titlesResponse = await axios.get(`${API_URL}/titles/`, { headers });
-          setTitles(titlesResponse.data);
+        if (titlesResponse.ok) {
+          const titlesData = await titlesResponse.json();
+          setTitles(titlesData);
           
           // Update default role selection in forms if titles exist
-          if (titlesResponse.data.length > 0) {
-            setInvites(invites.map(invite => ({
+          if (titlesData.length > 0) {
+            setInvites(prevInvites => prevInvites.map(invite => ({
               ...invite,
-              role: titlesResponse.data[0].id
+              role: titlesData[0].id
+            })));
+          } else {
+            // If no titles exist, set empty role
+            setInvites(prevInvites => prevInvites.map(invite => ({
+              ...invite,
+              role: ''
             })));
           }
-        } catch (titlesError) {
-          console.error("Failed to load titles:", titlesError);
-        } finally {
-          setTitlesLoading(false);
+        } else {
+          console.error("Failed to load titles: Server responded with status", titlesResponse.status);
         }
-        
-        // Transform data to include needed fields
-        const transformedMembers = response.data.map(member => ({
-          ...member,
-          status: member.user ? 'Active' : 'Pending',
-          joinedDate: member.created_at,
-          avatar: member.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
-          // We'd need backend APIs for these, using placeholders for now
-          tasksAssigned: 0,
-          tasksCompleted: 0
-        }));
-        
-        setTeamMembers(transformedMembers);
-        setError(null);
-        
-      } catch (err) {
-        console.error('Error fetching team members:', err);
-        setError('Failed to load team members. Please try again later.');
+      } catch (titlesError) {
+        console.error("Failed to load titles:", titlesError);
       } finally {
-        setLoading(false);
+        setTitlesLoading(false);
       }
-    };
-    
-    if (token) {
-      fetchTeamMembers();
+      
+      // Transform data to include needed fields
+      const transformedMembers = data.map(member => ({
+        ...member,
+        status: member.user ? 'Active' : 'Pending',
+        joinedDate: member.created_at,
+        avatar: member.name 
+          ? member.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)
+          : (member.email ? member.email[0].toUpperCase() : 'UN'),
+        tasksAssigned: 0,
+        tasksCompleted: 0
+      }));
+      
+      setTeamMembers(transformedMembers);
+      setError(null);
+      
+    } catch (err) {
+      console.error('Error fetching team members:', err);
+      setError('Failed to load team members. Please try again later.');
+    } finally {
+      setLoading(false);
     }
   }, [token]);
+  
+  // Fetch available permissions for titles
+  const fetchAvailablePermissions = useCallback(async () => {
+    if (!token) return;
+    
+    try {
+      setPermissionsLoading(true);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const response = await fetch(`${API_URL}/titles/available_permissions/`, { 
+        method: 'GET',
+        headers 
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch available permissions');
+      }
+      
+      const data = await response.json();
+      setAvailablePermissions(data);
+      
+    } catch (err) {
+      console.error('Error fetching available permissions:', err);
+    } finally {
+      setPermissionsLoading(false);
+    }
+  }, [token]);
+  
+  // Fetch team members when token changes
+  useEffect(() => {
+    if (token) {
+      fetchTeamMembers();
+      fetchAvailablePermissions();
+    }
+  }, [token, fetchTeamMembers, fetchAvailablePermissions]);
   
   // Define statuses
   const statuses = ['All', 'Active', 'Pending'];
@@ -133,6 +209,11 @@ const Team = () => {
   
   // Helper function to get avatar background
   const getAvatarBackground = (initial) => {
+    // If initial is undefined, use a default color
+    if (!initial) {
+      return 'bg-gray-600';
+    }
+
     const colors = [
       'bg-primary-600',
       'bg-purple-600',
@@ -149,8 +230,8 @@ const Team = () => {
   
   // Add another invite field
   const addInviteField = () => {
-    // Use the first title ID if available, otherwise use 'admin'
-    const defaultRole = titles.length > 0 ? titles[0].id : 'admin';
+    // Use the first title ID if available, otherwise use empty string
+    const defaultRole = titles.length > 0 ? titles[0].id : '';
     setInvites([...invites, { email: '', role: defaultRole, name: '' }]);
   };
 
@@ -176,16 +257,22 @@ const Team = () => {
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate emails
+    // Validate emails with more robust checks
     const isValid = invites.every(invite => {
       if (!invite.email.trim()) return false;
-      // Simple email validation regex
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(invite.email);
+      return emailRegex.test(invite.email.trim());
     });
     
     if (!isValid) {
       setInviteError("Please enter valid email addresses for all team members.");
+      return;
+    }
+    
+    // Validate title/role selection
+    const hasMissingRoles = invites.some(invite => !invite.role);
+    if (hasMissingRoles) {
+      setInviteError("Please assign a title to each team member. If no titles are available, please create one first.");
       return;
     }
     
@@ -200,27 +287,46 @@ const Team = () => {
         'Content-Type': 'application/json'
       };
       
-      // Filter out any empty invites
-      const validInvites = invites.filter(invite => invite.email.trim() !== '');
+      // Trim and validate invites
+      const validInvites = invites
+        .filter(invite => invite.email.trim() !== '')
+        .map(invite => ({
+          email: invite.email.trim(),
+          name: invite.name?.trim() || '',
+          role: invite.role  // Use the title ID
+        }));
       
-      // Use existing endpoint but include a flag to indicate we want OTP
-      await axios.post(
-        `${API_URL}/auth/invite/`,
-        { 
+      console.log('Sending invites:', validInvites);
+      
+      const response = await fetch(`${API_URL}/auth/invite/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
           invitations: validInvites,
-          use_otp: true  // Add this flag to indicate we want OTP instead of links
-        },
-        { headers }
-      );
+          use_otp: true  // Use OTP-based invitations
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to send invites');
+      }
+      
+      const responseData = await response.json();
+      console.log('Invite response:', responseData);
       
       setInviteSuccess(true);
-      // Clear form after successful submission
-      setInvites([{ email: '', role: titles.length > 0 ? titles[0].id : 'admin', name: '' }]);
+      // Reset invite form
+      setInvites([{ 
+        email: '', 
+        role: titles.length > 0 ? titles[0].id : '', 
+        name: '' 
+      }]);
       
-      // Switch to the invitations tab to show the new invites
+      // Switch to invitations tab
       setActiveTab('invitations');
       
-      // Reset success message after 3 seconds
+      // Reset modal after success
       setTimeout(() => {
         setInviteSuccess(false);
         setInviteModalOpen(false);
@@ -228,27 +334,108 @@ const Team = () => {
       
     } catch (err) {
       console.error("Error sending invites:", err);
-      setInviteError("Failed to send invites. Please try again.");
+      
+      // More detailed error handling
+      const errorMessage = 
+        err.message || 
+        "Failed to send invites. Please try again.";
+      
+      setInviteError(errorMessage);
     } finally {
       setInviteLoading(false);
     }
   };
 
-  // Get role options for select
-  const getRoleOptions = () => {
-    // If we have loaded titles, use those
-    if (titles && titles.length > 0) {
-      return titles.map(title => (
-        <option key={title.id} value={title.id}>
-          {title.name}
-        </option>
-      ));
+  // Handle creating a new title
+  const handleTitleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!newTitle.name.trim()) {
+      setTitleError("Please enter a title name.");
+      return;
     }
     
-    // Otherwise, just use Admin as default
-    return [
-      <option key="admin" value="admin">Admin</option>
-    ];
+    try {
+      setTitleSaving(true);
+      setTitleError(null);
+      
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      const response = await fetch(`${API_URL}/titles/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          name: newTitle.name.trim(),
+          description: newTitle.description.trim(),
+          permissions: newTitle.permissions
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create title');
+      }
+      
+      const createdTitle = await response.json();
+      
+      // Update titles list
+      setTitles(prevTitles => [...prevTitles, createdTitle]);
+      
+      // Reset form
+      setNewTitle({ name: '', description: '', permissions: [] });
+      
+      // Close modal
+      setShowTitleModal(false);
+      
+    } catch (err) {
+      console.error("Error creating title:", err);
+      setTitleError(err.message || "Failed to create title. Please try again.");
+    } finally {
+      setTitleSaving(false);
+    }
+  };
+
+  // Handle permission checkbox changes
+  const handlePermissionChange = (permissionId) => {
+    setNewTitle(prev => {
+      const permissions = [...prev.permissions];
+      
+      if (permissions.includes(permissionId)) {
+        // Remove permission if already selected
+        return {
+          ...prev,
+          permissions: permissions.filter(id => id !== permissionId)
+        };
+      } else {
+        // Add permission if not selected
+        return {
+          ...prev,
+          permissions: [...permissions, permissionId]
+        };
+      }
+    });
+  };
+  
+  // Get title options for select
+  const getTitleOptions = () => {
+    if (titlesLoading) {
+      return [<option key="loading" value="">Loading titles...</option>];
+    }
+    
+    if (titles.length === 0) {
+      return [<option key="none" value="">No titles available</option>];
+    }
+    
+    return titles.map(title => (
+      <option key={title.id} value={title.id}>
+        {title.name}
+      </option>
+    ));
   };
   
   return (
@@ -264,7 +451,18 @@ const Team = () => {
               Manage your team members and their roles.
             </p>
           </div>
-          <div className="mt-4 flex md:mt-0 md:ml-4">
+          <div className="mt-4 flex md:mt-0 md:ml-4 space-x-3">
+            <button 
+              type="button" 
+              onClick={() => setShowTitleModal(true)} 
+              className="btn btn-secondary"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Add Title
+            </button>
+            
             <button 
               type="button" 
               onClick={() => setInviteModalOpen(true)} 
@@ -404,12 +602,12 @@ const Team = () => {
                           {member.avatar}
                         </div>
                         <div className="ml-4">
-                          <Link 
-                            to={`/dashboard/team/${member.id}`} 
+                          <a 
+                            href={`/dashboard/team/${member.id}`} 
                             className="text-lg font-medium text-gray-900 hover:text-primary-600"
                           >
                             {member.name}
-                          </Link>
+                          </a>
                           <p className="text-sm text-gray-500">{member.title || 'No title'}</p>
                         </div>
                       </div>
@@ -436,18 +634,18 @@ const Team = () => {
                       </div>
                     </div>
                     <div className="bg-gray-50 px-6 py-3 flex justify-between border-t border-gray-200">
-                      <Link 
-                        to={`/dashboard/team/${member.id}`} 
+                      <a 
+                        href={`/dashboard/team/${member.id}`} 
                         className="text-sm text-gray-600 hover:text-primary-600"
                       >
                         View Profile
-                      </Link>
-                      <Link 
-                        to={`/dashboard/team/edit/${member.id}`} 
+                      </a>
+                      <a 
+                        href={`/dashboard/team/edit/${member.id}`} 
                         className="text-sm text-primary-600 hover:text-primary-700"
                       >
                         Edit
-                      </Link>
+                      </a>
                     </div>
                   </div>
                 ))}
@@ -465,7 +663,7 @@ const Team = () => {
                           Member
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Role
+                          Title
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
@@ -487,12 +685,12 @@ const Team = () => {
                                 {member.avatar}
                               </div>
                               <div className="ml-4">
-                                <Link 
-                                  to={`/dashboard/team/${member.id}`} 
+                                <a 
+                                  href={`/dashboard/team/${member.id}`} 
                                   className="text-sm font-medium text-gray-900 hover:text-primary-600"
                                 >
                                   {member.name}
-                                </Link>
+                                </a>
                                 <div className="text-sm text-gray-500">{member.email}</div>
                               </div>
                             </div>
@@ -509,19 +707,19 @@ const Team = () => {
                             {new Date(member.joinedDate).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <Link 
-                              to={`/dashboard/team/${member.id}`} 
+                            <a 
+                              href={`/dashboard/team/${member.id}`} 
                               className="text-primary-600 hover:text-primary-900 mr-4"
                             >
                               View
-                            </Link>
-                            <Link 
-                              to={`/dashboard/team/edit/${member.id}`} 
+                            </a>
+                            <a 
+                              href={`/dashboard/team/edit/${member.id}`} 
                               className="text-gray-600 hover:text-gray-900"
                             >
                               Edit
-                            </Link>
-                          </td>
+                            </a>
+                            </td>
                         </tr>
                       ))}
                     </tbody>
@@ -554,11 +752,24 @@ const Team = () => {
                     : 'Get started by adding your first team member.'}
                 </p>
                 {!searchTerm && filterRole === 'All' && filterStatus === 'All' && (
-                  <div className="mt-6">
+                  <div className="mt-6 flex space-x-3 justify-center">
+                    {titles.length === 0 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setShowTitleModal(true)}
+                        className="btn btn-secondary"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                        </svg>
+                        Create a Title First
+                      </button>
+                    )}
                     <button 
                       type="button" 
                       onClick={() => setInviteModalOpen(true)}
                       className="btn btn-primary"
+                      disabled={titles.length === 0}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="-ml-1 mr-2 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
@@ -575,7 +786,7 @@ const Team = () => {
               <div className="mt-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Team Overview</h3>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="text-center">
                       <div className="text-3xl font-bold text-gray-900">{teamMembers.length}</div>
                       <div className="text-sm text-gray-500 mt-1">Total Members</div>
@@ -588,9 +799,15 @@ const Team = () => {
                     </div>
                     <div className="text-center">
                       <div className="text-3xl font-bold text-gray-900">
-                        {roles.length > 0 ? roles.length - 1 : 0}
+                        {teamMembers.filter(m => m.status === 'Pending').length}
                       </div>
-                      <div className="text-sm text-gray-500 mt-1">Different Roles</div>
+                      <div className="text-sm text-gray-500 mt-1">Pending Invitations</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-900">
+                        {titles.length}
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1">Available Titles</div>
                     </div>
                   </div>
                 </div>
@@ -602,6 +819,145 @@ const Team = () => {
         {/* Pending Invitations Tab Content */}
         {activeTab === 'invitations' && (
           <PendingInvitations />
+        )}
+        
+        {/* Title Management Modal */}
+        {showTitleModal && (
+          <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full m-4 max-h-90vh overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900">Create New Title</h3>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setShowTitleModal(false);
+                      setTitleError(null);
+                      setNewTitle({ name: '', description: '', permissions: [] });
+                    }}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                {titleError && (
+                  <div className="mb-4 bg-red-50 border-l-4 border-red-400 p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-red-700">{titleError}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <form onSubmit={handleTitleSubmit}>
+                  <div className="space-y-6">
+                    <div>
+                      <label htmlFor="title-name" className="block text-sm font-medium text-gray-700 mb-1">
+                        Title Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="title-name"
+                        name="name"
+                        value={newTitle.name}
+                        onChange={(e) => setNewTitle({...newTitle, name: e.target.value})}
+                        required
+                        className="input w-full"
+                        placeholder="e.g. Project Manager, Developer, Admin"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="title-description" className="block text-sm font-medium text-gray-700 mb-1">
+                        Description
+                      </label>
+                      <textarea
+                        id="title-description"
+                        name="description"
+                        value={newTitle.description}
+                        onChange={(e) => setNewTitle({...newTitle, description: e.target.value})}
+                        rows="3"
+                        className="input w-full"
+                        placeholder="Describe the responsibilities of this title"
+                      ></textarea>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Permissions <span className="text-red-500">*</span>
+                      </label>
+                      
+                      {permissionsLoading ? (
+                        <div className="flex justify-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                        </div>
+                      ) : availablePermissions.length === 0 ? (
+                        <p className="text-sm text-gray-500 italic">No permissions available</p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-md">
+                          {availablePermissions.map(permission => (
+                            <div key={permission.id} className="flex items-start">
+                              <div className="flex items-center h-5">
+                                <input
+                                  id={`permission-${permission.id}`}
+                                  type="checkbox"
+                                  checked={newTitle.permissions.includes(permission.id)}
+                                  onChange={() => handlePermissionChange(permission.id)}
+                                  className="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300 rounded"
+                                />
+                              </div>
+                              <div className="ml-3 text-sm">
+                                <label htmlFor={`permission-${permission.id}`} className="font-medium text-gray-700">
+                                  {permission.name}
+                                </label>
+                                <p className="text-gray-500">{permission.description}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowTitleModal(false)}
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={titleSaving || newTitle.name.trim() === '' || newTitle.permissions.length === 0}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {titleSaving ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Creating...
+                        </>
+                      ) : 'Create Title'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
         )}
         
         {/* Team Invite Modal - Updated for OTP */}
@@ -747,10 +1103,10 @@ const Team = () => {
                             />
                           </div>
                           
-                          {/* Role Field */}
+                          {/* Title Field */}
                           <div>
                             <label htmlFor={`role-${index}`} className="block text-sm font-medium text-gray-700">
-                              {titles && titles.length > 0 ? 'Title' : 'Role'}
+                              Title
                             </label>
                             <select
                               id={`role-${index}`}
@@ -758,13 +1114,15 @@ const Team = () => {
                               value={invite.role}
                               onChange={(e) => handleInviteInputChange(index, e)}
                               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              required
                             >
-                              {titlesLoading ? (
-                                <option value="">Loading...</option>
-                              ) : (
-                                getRoleOptions()
-                              )}
+                              {getTitleOptions()}
                             </select>
+                            {titles.length === 0 && (
+                              <div className="mt-1 text-xs text-red-500">
+                                Please create a title first to assign to team members.
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -792,8 +1150,8 @@ const Team = () => {
                     </button>
                     <button
                       type="submit"
-                      disabled={inviteLoading}
-                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                      disabled={inviteLoading || titles.length === 0}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {inviteLoading ? (
                         <>
