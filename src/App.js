@@ -1,3 +1,4 @@
+// src/App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
@@ -27,6 +28,9 @@ import Calendar from './components/dashboard/Calendar';
 import Reports from './components/dashboard/Reports';
 import Settings from './components/dashboard/Settings';
 import OrganizationDashboard from './components/dashboard/OrganizationDashboard';
+
+// Messaging Components
+import MessagingLayout from './components/messaging/MessagingLayout';
 
 // Onboarding Components
 import OnboardingLayout from './components/onboarding/OnboardingLayout';
@@ -104,6 +108,10 @@ function App() {
               
               {/* Organization Route */}
               <Route path="organization" element={<OrganizationDashboard />} />
+              
+              {/* Messaging Routes */}
+              <Route path="messages" element={<MessagingLayout />} />
+              <Route path="messages/:conversationId" element={<MessagingLayout />} />
               
               {/* Other Dashboard routes */}
               <Route path="calendar" element={<Calendar />} />
