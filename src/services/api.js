@@ -14,10 +14,20 @@ const api = axios.create({
 // Add request interceptor to include auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    // Flexible token retrieval strategy
+    const token = 
+      localStorage.getItem('token') || 
+      localStorage.getItem('accessToken') || 
+      Object.values(localStorage)
+        .find(value => value && typeof value === 'string' && value.startsWith('eyJ'));
+
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
+      console.log('Token used for request:', token.slice(0, 10) + '...');
+    } else {
+      console.warn('No authentication token found');
     }
+
     return config;
   },
   (error) => {
@@ -328,7 +338,7 @@ export const onboardingAPI = {
 };
 
 // Export all APIs
-const apiServices = {
+export const apiServices = {
   authAPI,
   organizationAPI,
   teamMembersAPI,
@@ -344,4 +354,5 @@ const apiServices = {
   onboardingAPI,
 };
 
-export default apiServices;
+// Export the axios instance as the default export instead of apiServices
+export default api;

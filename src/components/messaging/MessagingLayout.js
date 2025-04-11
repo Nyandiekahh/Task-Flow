@@ -8,7 +8,7 @@ import NewConversationModal from './NewConversationModal';
 import { getConversations } from '../../services/messagingService';
 
 const MessagingLayout = () => {
-  const { user } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
   const { conversationId } = useParams();
   const navigate = useNavigate();
   
@@ -21,7 +21,9 @@ const MessagingLayout = () => {
   const fetchConversations = async () => {
     try {
       setLoading(true);
+      console.log("Fetching conversations...");
       const response = await getConversations();
+      console.log("Conversations response:", response);
       setConversations(response.data);
       
       // If no conversation is selected and we have conversations, select the first one
@@ -42,10 +44,19 @@ const MessagingLayout = () => {
   
   // Effect to set default organization
   useEffect(() => {
-    if (user && user.organizations && user.organizations.length > 0) {
-      setSelectedOrganizationId(user.organizations[0].id);
+    console.log("Current user object:", currentUser);
+    if (currentUser && currentUser.organizations && currentUser.organizations.length > 0) {
+      console.log("Setting organization ID:", currentUser.organizations[0].id);
+      setSelectedOrganizationId(currentUser.organizations[0].id);
+    } else {
+      console.log("No organizations found in user object or user is:", currentUser);
+      
+      // Temporary hardcoded ID for testing
+      const hardcodedOrgId = 1; // Use a valid ID from your database
+      console.log("Setting hardcoded organization ID:", hardcodedOrgId);
+      setSelectedOrganizationId(hardcodedOrgId);
     }
-  }, [user]);
+  }, [currentUser]);
   
   const handleNewConversationSuccess = (newConversation) => {
     setConversations([newConversation, ...conversations]);

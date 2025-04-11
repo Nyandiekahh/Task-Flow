@@ -5,7 +5,10 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { AuthContext } from '../../context/AuthContext';
 
 const ConversationList = ({ conversations, selectedConversationId, loading }) => {
-  const { user } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
+  
+  console.log("ConversationList - Current user:", currentUser);
+  console.log("ConversationList - Conversations:", conversations);
   
   if (loading) {
     return (
@@ -21,7 +24,7 @@ const ConversationList = ({ conversations, selectedConversationId, loading }) =>
     );
   }
   
-  if (conversations.length === 0) {
+  if (!conversations || conversations.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500">
         <p>No conversations yet</p>
@@ -54,8 +57,12 @@ const ConversationList = ({ conversations, selectedConversationId, loading }) =>
     }
     
     // For direct messages, show the other person's name
+    if (!currentUser || !conversation.participants) {
+      return 'Conversation';
+    }
+    
     const otherParticipant = conversation.participants.find(
-      p => p.user.id !== user.id
+      p => p.user.id !== currentUser.id
     );
     
     if (otherParticipant) {

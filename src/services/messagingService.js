@@ -1,50 +1,79 @@
-// src/services/messagingService.js
 import api from './api';
 
 // Conversations
 export const getConversations = () => {
-  return api.get('/api/v1/messaging/conversations/');
+  return api.get('/messaging/conversations/');
 };
 
 export const getConversation = (id) => {
-  return api.get(`/api/v1/messaging/conversations/${id}/`);
+  return api.get(`/messaging/conversations/${id}/`);
 };
 
 export const createConversation = (data) => {
-  return api.post('/api/v1/messaging/conversations/', data);
+  return api.post('/messaging/conversations/', data);
 };
 
 export const addParticipant = (conversationId, userId) => {
-  return api.post(`/api/v1/messaging/conversations/${conversationId}/add_participant/`, { user_id: userId });
+  return api.post(`/messaging/conversations/${conversationId}/add_participant/`, { user_id: userId });
 };
 
 export const removeParticipant = (conversationId, userId) => {
-  return api.post(`/api/v1/messaging/conversations/${conversationId}/remove_participant/`, { user_id: userId });
+  return api.post(`/messaging/conversations/${conversationId}/remove_participant/`, { user_id: userId });
 };
 
 export const getOrganizationUsers = (organizationId) => {
-  return api.get(`/api/v1/messaging/conversations/organization_users/?organization_id=${organizationId}`);
+  if (!organizationId) {
+    return Promise.reject(new Error('Organization ID is required'));
+  }
+  
+  console.log("Fetching organization users for ID:", organizationId);
+  return api.get('/messaging/conversations/organization_users/', {
+    params: { organization_id: organizationId }
+  });
 };
 
 // Messages
-export const getMessages = (conversationId) => {
-  return api.get(`/api/v1/messaging/messages/?conversation_id=${conversationId}`);
+export const getMessages = (conversationId, params = {}) => {
+  if (!conversationId) {
+    return Promise.reject(new Error('Conversation ID is required'));
+  }
+  
+  return api.get('/messaging/messages/', {
+    params: {
+      conversation_id: conversationId,
+      ...params
+    }
+  });
 };
 
 export const sendMessage = (data) => {
-  return api.post('/api/v1/messaging/messages/', data);
+  // Add basic validation
+  if (!data.conversation || !data.content) {
+    return Promise.reject(new Error('Conversation and content are required'));
+  }
+  
+  return api.post('/messaging/messages/', data);
 };
 
 export const sendMessageWithAttachments = (conversationId, content, files) => {
+  // Validate inputs
+  if (!conversationId || (!content && files.length === 0)) {
+    return Promise.reject(new Error('Conversation ID and content or files are required'));
+  }
+  
   const formData = new FormData();
   formData.append('conversation', conversationId);
-  formData.append('content', content);
   
-  files.forEach(file => {
-    formData.append('files', file);
+  // Only append content if it exists
+  if (content) {
+    formData.append('content', content);
+  }
+  
+  files.forEach((file, index) => {
+    formData.append(`files`, file, file.name || `file-${index}`);
   });
   
-  return api.post('/api/v1/messaging/messages/', formData, {
+  return api.post('/messaging/messages/', formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }
@@ -52,41 +81,81 @@ export const sendMessageWithAttachments = (conversationId, content, files) => {
 };
 
 export const markAsRead = (messageId) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/read/`);
+  if (!messageId) {
+    return Promise.reject(new Error('Message ID is required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/read/`);
 };
 
 export const reactToMessage = (messageId, reaction) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/react/`, { reaction });
+  if (!messageId || !reaction) {
+    return Promise.reject(new Error('Message ID and reaction are required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/react/`, { reaction });
 };
 
 export const pinMessage = (messageId) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/pin/`);
+  if (!messageId) {
+    return Promise.reject(new Error('Message ID is required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/pin/`);
 };
 
 export const unpinMessage = (messageId) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/unpin/`);
+  if (!messageId) {
+    return Promise.reject(new Error('Message ID is required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/unpin/`);
 };
 
 export const saveMessage = (messageId) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/save/`);
+  if (!messageId) {
+    return Promise.reject(new Error('Message ID is required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/save/`);
 };
 
 export const unsaveMessage = (messageId) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/unsave/`);
+  if (!messageId) {
+    return Promise.reject(new Error('Message ID is required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/unsave/`);
 };
 
 export const getThreadMessages = (parentMessageId) => {
-  return api.get(`/api/v1/messaging/messages/thread/?parent_message_id=${parentMessageId}`);
+  if (!parentMessageId) {
+    return Promise.reject(new Error('Parent Message ID is required'));
+  }
+  
+  return api.get('/messaging/messages/thread/', {
+    params: { parent_message_id: parentMessageId }
+  });
 };
 
 export const getSavedMessages = () => {
-  return api.get('/api/v1/messaging/messages/saved/');
+  return api.get('/messaging/messages/saved/');
 };
 
 export const getPinnedMessages = (conversationId) => {
-  return api.get(`/api/v1/messaging/messages/pinned/?conversation_id=${conversationId}`);
+  if (!conversationId) {
+    return Promise.reject(new Error('Conversation ID is required'));
+  }
+  
+  return api.get('/messaging/messages/pinned/', {
+    params: { conversation_id: conversationId }
+  });
 };
 
 export const sendTypingIndicator = (messageId) => {
-  return api.post(`/api/v1/messaging/messages/${messageId}/typing/`);
+  if (!messageId) {
+    return Promise.reject(new Error('Message ID is required'));
+  }
+  
+  return api.post(`/messaging/messages/${messageId}/typing/`);
 };

@@ -12,18 +12,59 @@ const NewConversationModal = ({ onClose, onSuccess, organizationId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   
   useEffect(() => {
+    console.log("NewConversationModal mounted with organizationId:", organizationId);
     fetchUsers();
   }, [organizationId]);
   
   const fetchUsers = async () => {
-    if (!organizationId) return;
+    console.log("fetchUsers called with organizationId:", organizationId);
+    
+    if (!organizationId) {
+      console.error("No organization ID provided");
+      setLoading(false);
+      return;
+    }
+    
+    console.log("Fetching users for organization:", organizationId);
     
     try {
       setLoading(true);
+      console.log("About to call getOrganizationUsers with:", organizationId);
+      console.log("API endpoint:", `/api/v1/messaging/conversations/organization_users/?organization_id=${organizationId}`);
+      
       const response = await getOrganizationUsers(organizationId);
-      setUsers(response.data);
+      console.log("API call complete. Response:", response);
+      
+      // Check the structure of the response data and transform it if needed
+      // If response.data is already in the expected format, use it directly
+      // If not, transform it to match the expected structure
+      
+      if (Array.isArray(response.data)) {
+        console.log("Response data is an array with length:", response.data.length);
+        // Determine if the response has the expected structure
+        const hasUserProperty = response.data.length > 0 && response.data[0].user;
+        
+        if (hasUserProperty) {
+          console.log("Data has correct structure with 'user' property");
+          // Data is already in the correct format
+          setUsers(response.data);
+        } else {
+          console.log("Transforming data to add 'user' property wrapper");
+          // Transform the data to match the expected structure
+          // Assuming response.data is an array of users
+          const transformedData = response.data.map(user => ({
+            user: user,
+            title: user.title || null
+          }));
+          setUsers(transformedData);
+        }
+      } else {
+        console.error("Unexpected response format:", response.data);
+        setUsers([]);
+      }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error("Error fetching users:", error);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
