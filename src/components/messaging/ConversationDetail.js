@@ -22,6 +22,7 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
   const [typingUsers, setTypingUsers] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   
   // Function declarations for dependency array
@@ -31,6 +32,7 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
       setConversation(response.data);
     } catch (error) {
       console.error('Error fetching conversation:', error);
+      setError('Failed to load conversation details');
     }
   };
   
@@ -40,7 +42,7 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
       
       const response = await getMessages(conversationId, loadMore ? page + 1 : 1);
       
-      const newMessages = response.data.results;
+      const newMessages = response?.data?.results || [];
       
       if (loadMore) {
         setMessages(prevMessages => [...newMessages, ...prevMessages]);
@@ -50,19 +52,25 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
         setPage(1);
       }
       
-      setHasMore(!!response.data.next);
+      setHasMore(!!response?.data?.next);
       
-      // Mark messages as read automatically
-      newMessages.forEach(message => {
-        if (message.sender.id !== user.id && !message.read_by.some(read => read.user.id === user.id)) {
-          markAsRead(message.id);
-        }
-      });
+      // Mark messages as read automatically with proper null checks
+      if (user && user.id) {
+        newMessages.forEach(message => {
+          if (message?.sender?.id !== user?.id && 
+              !message?.read_by?.some(read => read?.user?.id === user?.id)) {
+            markAsRead(message.id);
+          }
+        });
+      }
       
       // Update conversation list to reflect read messages
-      onConversationUpdate();
+      if (typeof onConversationUpdate === 'function') {
+        onConversationUpdate();
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
+      setError('Failed to load messages');
     } finally {
       setLoading(false);
     }
@@ -71,7 +79,7 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
   const fetchPinnedMessages = async () => {
     try {
       const response = await getPinnedMessages(conversationId);
-      setPinnedMessages(response.data);
+      setPinnedMessages(response?.data || []);
     } catch (error) {
       console.error('Error fetching pinned messages:', error);
     }
@@ -79,17 +87,20 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
   
   // Fetch conversation details
   useEffect(() => {
-    fetchConversation();
-    fetchMessages();
-    fetchPinnedMessages();
-    
-    // Reset state when conversation changes
-    setPage(1);
-    setHasMore(true);
-    setMessages([]);
-    setPinnedMessages([]);
-    setShowPinnedMessages(false);
-    setTypingUsers([]);
+    if (conversationId) {
+      fetchConversation();
+      fetchMessages();
+      fetchPinnedMessages();
+      
+      // Reset state when conversation changes
+      setPage(1);
+      setHasMore(true);
+      setMessages([]);
+      setPinnedMessages([]);
+      setShowPinnedMessages(false);
+      setTypingUsers([]);
+      setError(null);
+    }
   }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Scroll to bottom when messages change
@@ -121,6 +132,8 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
   };
   
   const handleSendMessage = (newMessage) => {
+    if (!user || !conversationId) return;
+    
     setMessages(prevMessages => [...prevMessages, {
       ...newMessage,
       conversation: parseInt(conversationId),
@@ -144,7 +157,28 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
     setShowPinnedMessages(!showPinnedMessages);
   };
   
-  if (!conversation) {
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-red-500">
+          <p>{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              fetchConversation();
+              fetchMessages();
+              fetchPinnedMessages();
+            }}
+            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!conversation || loading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -187,7 +221,7 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
         
         {typingUsers.length > 0 && (
           <div className="text-gray-500 text-sm italic mb-2">
-            {typingUsers.map(user => user.name).join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+            {typingUsers.map(user => user?.name || 'Someone').join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
           </div>
         )}
         

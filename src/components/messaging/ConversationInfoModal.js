@@ -10,9 +10,20 @@ const ConversationInfoModal = ({ conversation, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Check if current user is admin
+  // Early return for loading state
+  if (!conversation || !conversation.participants || !user) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6">
+          <p>Loading conversation details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if current user is admin with proper null checks
   const isAdmin = conversation.participants.some(
-    p => p.user.id === user.id && p.is_admin
+    p => p?.user?.id === user?.id && p?.is_admin
   );
 
   const handleAddParticipant = async (e) => {
@@ -133,28 +144,28 @@ const ConversationInfoModal = ({ conversation, onClose }) => {
             
             <ul className="divide-y">
               {conversation.participants.map((participant) => (
-                <li key={participant.id} className="py-3 flex justify-between items-center">
+                <li key={participant?.id || Math.random()} className="py-3 flex justify-between items-center">
                   <div className="flex items-center">
                     <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center mr-3">
-                      {participant.user.first_name ? participant.user.first_name[0].toUpperCase() : '?'}
+                      {participant?.user?.first_name ? participant.user.first_name[0].toUpperCase() : '?'}
                     </div>
                     <div>
                       <p className="font-medium">
-                        {participant.user.id === user.id 
+                        {participant?.user?.id === user?.id 
                           ? 'You' 
-                          : participant.user.first_name && participant.user.last_name 
+                          : participant?.user?.first_name && participant?.user?.last_name 
                             ? `${participant.user.first_name} ${participant.user.last_name}` 
-                            : participant.user.email}
-                        {participant.is_admin && ' (Admin)'}
+                            : participant?.user?.email || 'Unknown User'}
+                        {participant?.is_admin && ' (Admin)'}
                       </p>
-                      <p className="text-sm text-gray-500">{participant.user.email}</p>
+                      <p className="text-sm text-gray-500">{participant?.user?.email || 'No email available'}</p>
                     </div>
                   </div>
                   
                   {/* Remove participant button (show only if admin and not for current user) */}
-                  {isAdmin && participant.user.id !== user.id && (
+                  {isAdmin && participant?.user?.id !== user?.id && (
                     <button
-                      onClick={() => handleRemoveParticipant(participant.user.id)}
+                      onClick={() => handleRemoveParticipant(participant?.user?.id)}
                       className="text-red-500 hover:text-red-700"
                       title="Remove participant"
                     >

@@ -1,3 +1,4 @@
+// src/components/messaging/MessageList.js
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import MessageActions from './MessageActions';
@@ -5,8 +6,8 @@ import MessageActions from './MessageActions';
 const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
   const [activeMessage, setActiveMessage] = useState(null);
   
-  // More comprehensive check for messages
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+  // Enhanced check for messages and currentUser
+  if (!messages || !Array.isArray(messages) || messages.length === 0 || !currentUser) {
     return (
       <div className="flex items-center justify-center h-full text-center p-4 text-gray-500">
         <div>
@@ -32,9 +33,15 @@ const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
     return groups;
   }, {});
   
-  // Format timestamp
+  // Format timestamp with defensive check
   const formatMessageTime = (timestamp) => {
-    return format(new Date(timestamp), 'h:mm a');
+    if (!timestamp) return 'Unknown time';
+    try {
+      return format(new Date(timestamp), 'h:mm a');
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return 'Invalid time';
+    }
   };
   
   // Check if a message should show sender info or be grouped with previous
@@ -45,18 +52,21 @@ const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
     const previousMessage = messages[index - 1];
     
     // Additional null checks
-    if (!currentMessage || !previousMessage) return true;
-    if (!currentMessage.sender || !previousMessage.sender) return true;
+    if (!currentMessage?.sender?.id || !previousMessage?.sender?.id) return true;
     
     // If sender changes, show the sender
     if (currentMessage.sender.id !== previousMessage.sender.id) return true;
     
     // If more than 5 minutes between messages, show the sender
-    const currentTime = new Date(currentMessage.timestamp).getTime();
-    const previousTime = new Date(previousMessage.timestamp).getTime();
-    const fiveMinutes = 5 * 60 * 1000;
-    
-    return (currentTime - previousTime) > fiveMinutes;
+    try {
+      const currentTime = new Date(currentMessage.timestamp).getTime();
+      const previousTime = new Date(previousMessage.timestamp).getTime();
+      const fiveMinutes = 5 * 60 * 1000;
+      
+      return (currentTime - previousTime) > fiveMinutes;
+    } catch (error) {
+      return true; // If there's an error parsing dates, default to showing sender
+    }
   };
   
   return (
@@ -76,7 +86,7 @@ const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
           
           {dateMessages.map((message, index) => {
             // Extensive validation of message and sender
-            if (!message || !message.sender || !currentUser) {
+            if (!message?.sender?.id || !currentUser?.id) {
               console.warn('Invalid message or user data:', { message, currentUser });
               return null;
             }
@@ -94,14 +104,14 @@ const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
               >
                 {showSender && !isCurrentUser && (
                   <div className="text-sm font-medium mb-1">
-                    {message.sender.first_name || message.sender.email || 'Unknown Sender'}
+                    {message.sender?.first_name || message.sender?.email || 'Unknown Sender'}
                   </div>
                 )}
                 
                 <div className="flex items-end">
                   {!isCurrentUser && showSender && (
                     <div className="w-8 h-8 rounded-full bg-gray-300 mr-2 flex-shrink-0 flex items-center justify-center">
-                      {message.sender.first_name ? message.sender.first_name[0].toUpperCase() : '?'}
+                      {message.sender?.first_name ? message.sender.first_name[0].toUpperCase() : '?'}
                     </div>
                   )}
                   
@@ -116,9 +126,9 @@ const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
                       {message.attachments && message.attachments.length > 0 && (
                         <div className="mt-2">
                           {message.attachments.map((attachment, attachIndex) => (
-                            <div key={attachment.id || `attachment-${attachIndex}`} className="text-sm">
+                            <div key={attachment?.id || `attachment-${attachIndex}`} className="text-sm">
                               <a 
-                                href={attachment.file} 
+                                href={attachment?.file} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className={`flex items-center space-x-1 ${isCurrentUser ? 'text-blue-100' : 'text-blue-500'}`}
@@ -126,7 +136,7 @@ const MessageList = ({ messages, currentUser, onPinUnpinMessage }) => {
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                                 </svg>
-                                <span>{attachment.file_name || 'Attachment'}</span>
+                                <span>{attachment?.file_name || 'Attachment'}</span>
                               </a>
                             </div>
                           ))}
