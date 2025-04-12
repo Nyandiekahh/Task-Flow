@@ -2,8 +2,9 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
-const NewTask = () => {
+const TaskCreateForm = () => {
   const { token } = useContext(AuthContext);
   const navigate = useNavigate();
   
@@ -14,42 +15,36 @@ const NewTask = () => {
   const [projects, setProjects] = useState([]);
   const [existingTasks, setExistingTasks] = useState([]);
   
-  // State for deadline calculation
-  const [deadlineType, setDeadlineType] = useState('date'); // 'date' or 'days'
-  const [daysUntilDeadline, setDaysUntilDeadline] = useState(1);
-  const [includeWeekends, setIncludeWeekends] = useState(true);
-  const [includeHolidays, setIncludeHolidays] = useState(true);
-  
-  // Form state
+  // Form state with ALL fields supported by the backend
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     priority: 'medium',
-    status: 'pending',
-    due_date: '',
+    category: 'general', // Added category field which was missing
     start_date: '',
+    due_date: '',
     estimated_hours: '',
-    assigned_to: '',
-    assignees: [],
-    approvers: [],
-    watchers: [],
-    project: '',
-    tags: [],
-    custom_tags: '',
-    linked_tasks: [],
-    prerequisites: [],
-    dependent_tasks: [],
     is_recurring: false,
     recurring_frequency: 'weekly',
     recurring_ends_on: '',
-    acceptance_criteria: '',
-    attachments: [],
-    notes: '',
+    organization: '', // This will be set automatically by the backend
+    project: '',
     visibility: 'team',
+    acceptance_criteria: '',
+    tags: '',
+    notes: '',
     time_tracking_enabled: false,
     budget_hours: '',
     is_billable: false,
-    client_reference: ''
+    client_reference: '',
+    assigned_to: '',
+    // These will be handled separately in the API call
+    assignees: [],
+    approvers: [],
+    watchers: [],
+    prerequisites: [],
+    linked_tasks: [],
+    attachments: []
   });
 
   // Sections state for accordion
@@ -114,51 +109,6 @@ const NewTask = () => {
     fetchData();
   }, [token]);
   
-  // Calculate due date based on the number of days
-  useEffect(() => {
-    if (deadlineType === 'days' && daysUntilDeadline > 0) {
-      const calculateDueDate = () => {
-        const today = new Date();
-        let daysToAdd = parseInt(daysUntilDeadline, 10);
-        let calculatedDate = new Date(today);
-        
-        if (!includeWeekends || !includeHolidays) {
-          let daysAdded = 0;
-          while (daysAdded < daysToAdd) {
-            calculatedDate.setDate(calculatedDate.getDate() + 1);
-            
-            // Check if it's a weekend (0 = Sunday, 6 = Saturday)
-            const isWeekend = calculatedDate.getDay() === 0 || calculatedDate.getDay() === 6;
-            
-            // For this example, we'll consider holidays to be hardcoded
-            // In a real application, you would check against a holiday API or database
-            const isHoliday = false; // Placeholder for holiday check
-            
-            if ((includeWeekends || !isWeekend) && (includeHolidays || !isHoliday)) {
-              daysAdded++;
-            }
-          }
-        } else {
-          // If we include both weekends and holidays, just add the days directly
-          calculatedDate.setDate(calculatedDate.getDate() + daysToAdd);
-        }
-        
-        // Format the date as YYYY-MM-DD for the input field
-        const year = calculatedDate.getFullYear();
-        const month = String(calculatedDate.getMonth() + 1).padStart(2, '0');
-        const day = String(calculatedDate.getDate()).padStart(2, '0');
-        
-        return `${year}-${month}-${day}`;
-      };
-      
-      const dueDateValue = calculateDueDate();
-      setFormData(prev => ({
-        ...prev,
-        due_date: dueDateValue
-      }));
-    }
-  }, [deadlineType, daysUntilDeadline, includeWeekends, includeHolidays]);
-  
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
@@ -196,13 +146,6 @@ const NewTask = () => {
       attachments: prev.attachments.filter((_, i) => i !== index)
     }));
   };
-
-  const handleTagsChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      custom_tags: e.target.value
-    }));
-  };
   
   const toggleSection = (section) => {
     setOpenSections(prev => ({
@@ -210,48 +153,141 @@ const NewTask = () => {
       [section]: !prev[section]
     }));
   };
+
+  // Form validation
+  const validateForm = () => {
+    // Basic validation
+    if (!formData.title.trim()) {
+      setError('Task title is required');
+      return false;
+    }
+
+    // Validate start_date and due_date
+    if (formData.start_date && formData.due_date) {
+      const startDate = new Date(formData.start_date);
+      const dueDate = new Date(formData.due_date);
+      if (startDate > dueDate) {
+        setError('Due date must be after start date');
+        return false;
+      }
+    }
+
+    // Validate recurring task fields
+    if (formData.is_recurring && !formData.recurring_frequency) {
+      setError('Recurring frequency is required for recurring tasks');
+      return false;
+    }
+
+    // Validate billable tasks
+    if (formData.is_billable && !formData.time_tracking_enabled) {
+      setError('Time tracking must be enabled for billable tasks');
+      return false;
+    }
+
+    return true;
+  };
   
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    
+    if (!validateForm()) {
+      return;
+    }
+    
+    setLoading(true);
     
     try {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
       
-      // Create a JSON object for submission instead of FormData
+      // Prepare task data for API
       const taskData = {
         title: formData.title,
-        description: formData.description,
+        description: formData.description || '',
         priority: formData.priority,
-        status: formData.status,
-        due_date: formData.due_date ? `${formData.due_date}T23:59:59Z` : null,
-        assigned_to: formData.assigned_to || null,
-        custom_tags: formData.custom_tags
+        category: formData.category,
+        visibility: formData.visibility,
+        notes: formData.notes || '',
+        tags: formData.tags || '',
       };
       
-      // Add optional fields only if they have values
-      if (formData.start_date) taskData.start_date = formData.start_date;
-      if (formData.estimated_hours) taskData.estimated_hours = formData.estimated_hours;
-      if (formData.project) taskData.project = formData.project;
+      // Add optional date fields with proper formatting
+      if (formData.start_date) {
+        taskData.start_date = `${formData.start_date}T00:00:00Z`;
+      }
+      
+      if (formData.due_date) {
+        taskData.due_date = `${formData.due_date}T23:59:59Z`;
+      }
+      
+      // Add project if selected
+      if (formData.project) {
+        taskData.project = formData.project;
+      }
+      
+      // Add assigned_to if selected
+      if (formData.assigned_to) {
+        taskData.assigned_to = formData.assigned_to;
+      }
+      
+      // Add estimated hours if provided
+      if (formData.estimated_hours) {
+        taskData.estimated_hours = parseFloat(formData.estimated_hours);
+      }
+      
+      // Add acceptance criteria if provided
+      if (formData.acceptance_criteria) {
+        taskData.acceptance_criteria = formData.acceptance_criteria;
+      }
+      
+      // Handle recurring task settings
       if (formData.is_recurring) {
         taskData.is_recurring = true;
         taskData.recurring_frequency = formData.recurring_frequency;
-        if (formData.recurring_ends_on) taskData.recurring_ends_on = formData.recurring_ends_on;
-      }
-      if (formData.acceptance_criteria) taskData.acceptance_criteria = formData.acceptance_criteria;
-      if (formData.notes) taskData.notes = formData.notes;
-      if (formData.visibility) taskData.visibility = formData.visibility;
-      if (formData.time_tracking_enabled) {
-        taskData.time_tracking_enabled = true;
-        if (formData.budget_hours) taskData.budget_hours = formData.budget_hours;
-        if (formData.is_billable) {
-          taskData.is_billable = true;
-          if (formData.client_reference) taskData.client_reference = formData.client_reference;
+        if (formData.recurring_ends_on) {
+          taskData.recurring_ends_on = formData.recurring_ends_on;
         }
       }
       
-      // Submit data to API as JSON
+      // Handle time tracking settings
+      if (formData.time_tracking_enabled) {
+        taskData.time_tracking_enabled = true;
+        
+        if (formData.budget_hours) {
+          taskData.budget_hours = parseFloat(formData.budget_hours);
+        }
+        
+        if (formData.is_billable) {
+          taskData.is_billable = true;
+          if (formData.client_reference) {
+            taskData.client_reference = formData.client_reference;
+          }
+        }
+      }
+      
+      // Add assignees, approvers, watchers if selected
+      if (formData.assignees.length > 0) {
+        taskData.assignees = formData.assignees;
+      }
+      
+      if (formData.approvers.length > 0) {
+        taskData.approvers = formData.approvers;
+      }
+      
+      if (formData.watchers.length > 0) {
+        taskData.watchers = formData.watchers;
+      }
+
+      // Add task relationships if selected
+      if (formData.prerequisites.length > 0) {
+        taskData.prerequisites = formData.prerequisites;
+      }
+      
+      if (formData.linked_tasks.length > 0) {
+        taskData.linked_tasks = formData.linked_tasks;
+      }
+      
+      // Create the task
       const response = await axios.post(`${API_URL}/tasks/`, taskData, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -261,15 +297,16 @@ const NewTask = () => {
       
       setSuccess(true);
       
-      // Handle attachments separately
+      // Handle file attachments
       if (formData.attachments.length > 0) {
         const taskId = response.data.id;
         
+        // Upload each attachment
         for (const file of formData.attachments) {
-          const attachmentData = new FormData();
-          attachmentData.append('file', file);
-          
           try {
+            const attachmentData = new FormData();
+            attachmentData.append('file', file);
+            
             await axios.post(`${API_URL}/tasks/${taskId}/add_attachment/`, attachmentData, {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -278,39 +315,31 @@ const NewTask = () => {
             });
           } catch (attachErr) {
             console.error('Error uploading attachment:', attachErr);
+            toast.warning(`Could not upload attachment ${file.name}`);
           }
         }
       }
       
-      // Redirect to task details page after 1 second
+      // Show success toast
+      toast.success('Task created successfully!');
+      
+      // Navigate to task detail page after successful creation
       setTimeout(() => {
-        navigate(`/dashboard/tasks/${response.data.id}`);
-      }, 1000);
+        navigate(`/tasks/${response.data.id}`);
+      }, 1500);
       
     } catch (err) {
       console.error('Error creating task:', err);
-      setError(err.response?.data?.detail || 'Failed to create task. Please try again.');
-    } finally {
+      setError(err.response?.data?.detail || 
+               err.response?.data?.message || 
+               'Failed to create task. Please try again.');
       setLoading(false);
     }
   };
   
-  // Function to check if a date is in the past
-  const isDateInPast = (dateString) => {
-    if (!dateString) return false;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const selectedDate = new Date(dateString);
-    selectedDate.setHours(0, 0, 0, 0);
-    
-    return selectedDate < today;
-  };
-  
   return (
     <div className="py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="md:flex md:items-center md:justify-between mb-6">
           <div className="flex-1 min-w-0">
@@ -318,13 +347,13 @@ const NewTask = () => {
               Create New Task
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Add a new task to your workflow.
+              Add a new task with all the details needed for successful completion.
             </p>
           </div>
         </div>
         
         {/* Form */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg shadow overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* Display error if any */}
             {error && (
@@ -342,7 +371,7 @@ const NewTask = () => {
               </div>
             )}
             
-            {/* Display success message */}
+            {/* Success message */}
             {success && (
               <div className="bg-green-50 border-l-4 border-green-400 p-4">
                 <div className="flex">
@@ -352,7 +381,7 @@ const NewTask = () => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-green-700">Task created successfully! Redirecting...</p>
+                    <p className="text-sm text-green-700">Task created successfully! You will be redirected to the task details page.</p>
                   </div>
                 </div>
               </div>
@@ -383,13 +412,13 @@ const NewTask = () => {
                   {/* Title */}
                   <div>
                     <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-                      Task Title *
+                      Task Title <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       name="title"
                       id="title"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.title}
                       onChange={handleChange}
                       required
@@ -405,14 +434,14 @@ const NewTask = () => {
                       name="description"
                       id="description"
                       rows="4"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.description}
                       onChange={handleChange}
                       placeholder="Provide detailed instructions for this task..."
                     ></textarea>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Priority */}
                     <div>
                       <label htmlFor="priority" className="block text-sm font-medium text-gray-700">
@@ -421,7 +450,7 @@ const NewTask = () => {
                       <select
                         name="priority"
                         id="priority"
-                        className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                         value={formData.priority}
                         onChange={handleChange}
                       >
@@ -429,6 +458,31 @@ const NewTask = () => {
                         <option value="medium">Medium</option>
                         <option value="high">High</option>
                         <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    
+                    {/* Category */}
+                    <div>
+                      <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+                        Category
+                      </label>
+                      <select
+                        name="category"
+                        id="category"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        value={formData.category}
+                        onChange={handleChange}
+                      >
+                        <option value="general">General</option>
+                        <option value="admin">Administrative</option>
+                        <option value="finance">Finance</option>
+                        <option value="hr">Human Resources</option>
+                        <option value="marketing">Marketing</option>
+                        <option value="operations">Operations</option>
+                        <option value="planning">Planning</option>
+                        <option value="research">Research</option>
+                        <option value="sales">Sales</option>
+                        <option value="other">Other</option>
                       </select>
                     </div>
                     
@@ -440,7 +494,7 @@ const NewTask = () => {
                       <select
                         name="project"
                         id="project"
-                        className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                         value={formData.project}
                         onChange={handleChange}
                       >
@@ -456,18 +510,21 @@ const NewTask = () => {
                   
                   {/* Tags */}
                   <div>
-                    <label htmlFor="custom_tags" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
                       Tags (comma-separated)
                     </label>
                     <input
                       type="text"
-                      name="custom_tags"
-                      id="custom_tags"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                      value={formData.custom_tags}
-                      onChange={handleTagsChange}
+                      name="tags"
+                      id="tags"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      value={formData.tags}
+                      onChange={handleChange}
                       placeholder="planning, quarterly, review, etc."
                     />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Separate tags with commas. These will help with filtering and organizing tasks.
+                    </p>
                   </div>
                 </div>
               )}
@@ -495,60 +552,23 @@ const NewTask = () => {
               
               {openSections.timeline && (
                 <div className="p-4 space-y-4 border-t border-gray-200">
-                  {/* Start Date */}
-                  <div>
-                    <label htmlFor="start_date" className="block text-sm font-medium text-gray-700">
-                      Start Date
-                    </label>
-                    <input
-                      type="date"
-                      name="start_date"
-                      id="start_date"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                      value={formData.start_date}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  
-                  {/* Due Date Selection Type */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Set Deadline By
-                    </label>
-                    <div className="mt-2 flex items-center space-x-4">
-                      <div className="flex items-center">
-                        <input
-                          id="deadline-date"
-                          type="radio"
-                          name="deadline-type"
-                          value="date"
-                          checked={deadlineType === 'date'}
-                          onChange={() => setDeadlineType('date')}
-                          className="h-4 w-4 text-indigo-600 border-gray-300"
-                        />
-                        <label htmlFor="deadline-date" className="ml-2 block text-sm text-gray-700">
-                          Specific Date
-                        </label>
-                      </div>
-                      <div className="flex items-center">
-                        <input
-                          id="deadline-days"
-                          type="radio"
-                          name="deadline-type"
-                          value="days"
-                          checked={deadlineType === 'days'}
-                          onChange={() => setDeadlineType('days')}
-                          className="h-4 w-4 text-indigo-600 border-gray-300"
-                        />
-                        <label htmlFor="deadline-days" className="ml-2 block text-sm text-gray-700">
-                          Number of Days
-                        </label>
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Start Date */}
+                    <div>
+                      <label htmlFor="start_date" className="block text-sm font-medium text-gray-700">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        name="start_date"
+                        id="start_date"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        value={formData.start_date}
+                        onChange={handleChange}
+                      />
                     </div>
-                  </div>
-                  
-                  {/* Due Date Input based on selection */}
-                  {deadlineType === 'date' ? (
+                    
+                    {/* Due Date */}
                     <div>
                       <label htmlFor="due_date" className="block text-sm font-medium text-gray-700">
                         Due Date
@@ -557,64 +577,15 @@ const NewTask = () => {
                         type="date"
                         name="due_date"
                         id="due_date"
-                        className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                         value={formData.due_date}
                         onChange={handleChange}
-                        min={new Date().toISOString().split('T')[0]}
                       />
-                      {isDateInPast(formData.due_date) && (
-                        <p className="mt-1 text-sm text-red-600">Due date cannot be in the past.</p>
+                      {formData.start_date && formData.due_date && new Date(formData.start_date) > new Date(formData.due_date) && (
+                        <p className="mt-1 text-sm text-red-600">Due date must be after start date.</p>
                       )}
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div>
-                        <label htmlFor="days-until-deadline" className="block text-sm font-medium text-gray-700">
-                          Days Until Deadline
-                        </label>
-                        <input
-                          type="number"
-                          id="days-until-deadline"
-                          min="1"
-                          className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                          value={daysUntilDeadline}
-                          onChange={(e) => setDaysUntilDeadline(e.target.value)}
-                        />
-                      </div>
-                      
-                      <div className="flex items-center mt-2">
-                        <input
-                          type="checkbox"
-                          id="include-weekends"
-                          checked={includeWeekends}
-                          onChange={(e) => setIncludeWeekends(e.target.checked)}
-                          className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                        />
-                        <label htmlFor="include-weekends" className="ml-2 block text-sm text-gray-700">
-                          Include weekends in calculation
-                        </label>
-                      </div>
-                      
-                      <div className="flex items-center mt-2">
-                        <input
-                          type="checkbox"
-                          id="include-holidays"
-                          checked={includeHolidays}
-                          onChange={(e) => setIncludeHolidays(e.target.checked)}
-                          className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                        />
-                        <label htmlFor="include-holidays" className="ml-2 block text-sm text-gray-700">
-                          Include holidays in calculation
-                        </label>
-                      </div>
-                      
-                      <div className="mt-2 p-2 bg-gray-50 rounded">
-                        <p className="text-sm text-gray-700">
-                          Calculated due date: <strong>{formData.due_date}</strong>
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                   
                   {/* Estimated Hours */}
                   <div>
@@ -625,7 +596,7 @@ const NewTask = () => {
                       type="number"
                       name="estimated_hours"
                       id="estimated_hours"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.estimated_hours}
                       onChange={handleChange}
                       min="0"
@@ -654,14 +625,15 @@ const NewTask = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-6 mt-2">
                         <div>
                           <label htmlFor="recurring_frequency" className="block text-sm font-medium text-gray-700">
-                            Frequency
+                            Frequency <span className="text-red-500">*</span>
                           </label>
                           <select
                             name="recurring_frequency"
                             id="recurring_frequency"
-                            className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             value={formData.recurring_frequency}
                             onChange={handleChange}
+                            required={formData.is_recurring}
                           >
                             <option value="daily">Daily</option>
                             <option value="weekly">Weekly</option>
@@ -679,7 +651,7 @@ const NewTask = () => {
                             type="date"
                             name="recurring_ends_on"
                             id="recurring_ends_on"
-                            className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             value={formData.recurring_ends_on}
                             onChange={handleChange}
                             min={new Date().toISOString().split('T')[0]}
@@ -692,7 +664,6 @@ const NewTask = () => {
               )}
             </div>
             
-            {/* Assignment Section */}
             {/* Assignment Section */}
             <div className="border border-gray-200 rounded-md overflow-hidden">
               <div 
@@ -723,7 +694,7 @@ const NewTask = () => {
                     <select
                       name="assigned_to"
                       id="assigned_to"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.assigned_to}
                       onChange={handleChange}
                     >
@@ -739,13 +710,13 @@ const NewTask = () => {
                   {/* Additional Assignees */}
                   <div>
                     <label htmlFor="assignees" className="block text-sm font-medium text-gray-700">
-                      Additional Assignees (hold Ctrl/Cmd to select multiple)
+                      Additional Assignees
                     </label>
                     <select
                       multiple
                       name="assignees"
                       id="assignees"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-32"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-32"
                       value={formData.assignees}
                       onChange={(e) => handleMultiSelectChange(e, 'assignees')}
                     >
@@ -767,7 +738,7 @@ const NewTask = () => {
                       multiple
                       name="approvers"
                       id="approvers"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
                       value={formData.approvers}
                       onChange={(e) => handleMultiSelectChange(e, 'approvers')}
                     >
@@ -789,7 +760,7 @@ const NewTask = () => {
                       multiple
                       name="watchers"
                       id="watchers"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
                       value={formData.watchers}
                       onChange={(e) => handleMultiSelectChange(e, 'watchers')}
                     >
@@ -810,7 +781,7 @@ const NewTask = () => {
                     <select
                       name="visibility"
                       id="visibility"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.visibility}
                       onChange={handleChange}
                     >
@@ -819,7 +790,7 @@ const NewTask = () => {
                       <option value="public">Public (visible to clients and external users)</option>
                     </select>
                   </div>
-                </div>
+                  </div>
               )}
             </div>
             
@@ -854,11 +825,10 @@ const NewTask = () => {
                       multiple
                       name="prerequisites"
                       id="prerequisites"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
                       value={formData.prerequisites}
                       onChange={(e) => handleMultiSelectChange(e, 'prerequisites')}
                     >
-                      <option value="" disabled>Select prerequisite tasks...</option>
                       {existingTasks.map(task => (
                         <option key={task.id} value={task.id}>
                           {task.title}
@@ -876,11 +846,10 @@ const NewTask = () => {
                       multiple
                       name="linked_tasks"
                       id="linked_tasks"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 h-24"
                       value={formData.linked_tasks}
                       onChange={(e) => handleMultiSelectChange(e, 'linked_tasks')}
                     >
-                      <option value="" disabled>Select related tasks...</option>
                       {existingTasks.map(task => (
                         <option key={task.id} value={task.id}>
                           {task.title}
@@ -996,7 +965,7 @@ const NewTask = () => {
                       name="notes"
                       id="notes"
                       rows="3"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.notes}
                       onChange={handleChange}
                       placeholder="Additional information, context, or instructions for those working on this task..."
@@ -1006,7 +975,7 @@ const NewTask = () => {
               )}
             </div>
             
-            {/* Additional Details */}
+            {/* Additional Details - Goals & Measurement */}
             <div className="border border-gray-200 rounded-md overflow-hidden">
               <div 
                 className="bg-gray-50 px-4 py-3 flex justify-between items-center cursor-pointer"
@@ -1037,7 +1006,7 @@ const NewTask = () => {
                       name="acceptance_criteria"
                       id="acceptance_criteria"
                       rows="4"
-                      className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                       value={formData.acceptance_criteria}
                       onChange={handleChange}
                       placeholder="What needs to be true for this task to be considered complete?"
@@ -1050,7 +1019,7 @@ const NewTask = () => {
               )}
             </div>
             
-            {/* Time Tracking */}
+            {/* Time Tracking & Budget Section */}
             <div className="border border-gray-200 rounded-md overflow-hidden">
               <div 
                 className="bg-gray-50 px-4 py-3 flex justify-between items-center cursor-pointer"
@@ -1098,7 +1067,7 @@ const NewTask = () => {
                           type="number"
                           name="budget_hours"
                           id="budget_hours"
-                          className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                           value={formData.budget_hours}
                           onChange={handleChange}
                           min="0"
@@ -1115,6 +1084,7 @@ const NewTask = () => {
                           className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
                           checked={formData.is_billable}
                           onChange={handleChange}
+                          disabled={!formData.time_tracking_enabled}
                         />
                         <label htmlFor="is_billable" className="ml-2 block text-sm font-medium text-gray-700">
                           This is a billable task
@@ -1131,7 +1101,7 @@ const NewTask = () => {
                             type="text"
                             name="client_reference"
                             id="client_reference"
-                            className="input mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             value={formData.client_reference}
                             onChange={handleChange}
                             placeholder="e.g. PO-12345"
@@ -1151,14 +1121,14 @@ const NewTask = () => {
                 <button
                   type="button"
                   className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                  onClick={() => navigate('/dashboard/tasks')}
+                  onClick={() => navigate('/tasks')}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                  disabled={loading}
+                  disabled={loading || success}
                 >
                   {loading ? (
                     <>
@@ -1167,6 +1137,13 @@ const NewTask = () => {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                       Creating...
+                    </>
+                  ) : success ? (
+                    <>
+                      <svg className="h-4 w-4 mr-1 text-white inline" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      Task Created
                     </>
                   ) : 'Create Task'}
                 </button>
@@ -1179,4 +1156,4 @@ const NewTask = () => {
   );
 };
 
-export default NewTask;
+export default TaskCreateForm;

@@ -11,23 +11,23 @@ const api = axios.create({
   },
 });
 
-// Add request interceptor to include auth token
 api.interceptors.request.use(
   (config) => {
-    // Flexible token retrieval strategy
-    const token = 
-      localStorage.getItem('token') || 
-      localStorage.getItem('accessToken') || 
-      Object.values(localStorage)
-        .find(value => value && typeof value === 'string' && value.startsWith('eyJ'));
+    // Don't add auth headers for these endpoints
+    const noAuthEndpoints = ['/auth/verify-otp/', '/auth/token/', '/auth/register/'];
+    const requiresAuth = !noAuthEndpoints.some(endpoint => config.url.includes(endpoint));
 
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-      console.log('Token used for request:', token.slice(0, 10) + '...');
-    } else {
-      console.warn('No authentication token found');
+    if (requiresAuth) {
+      const token = localStorage.getItem('token') || 
+        localStorage.getItem('accessToken') || 
+        Object.values(localStorage)
+          .find(value => value && typeof value === 'string' && value.startsWith('eyJ'));
+      
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
     }
-
+    
     return config;
   },
   (error) => {

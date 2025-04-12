@@ -2,10 +2,11 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
 const TaskDetail = () => {
   const { id } = useParams();
-  const { token } = useContext(AuthContext);
+  const { token, user } = useContext(AuthContext);
   const navigate = useNavigate();
   
   const [task, setTask] = useState(null);
@@ -45,6 +46,17 @@ const TaskDetail = () => {
   });
   const [submittingTime, setSubmittingTime] = useState(false);
   const [showTimeModal, setShowTimeModal] = useState(false);
+
+  // State for user permissions
+  const [userPermissions, setUserPermissions] = useState({
+    canView: true,
+    canUpdate: true,
+    canDelete: false,
+    canAssign: true,
+    canApprove: true,
+    canReject: true,
+    canComment: true
+  });
 
   // Format status display
   const formatStatus = (status) => {
@@ -107,6 +119,151 @@ const TaskDetail = () => {
     const options = { year: 'numeric', month: 'short', day: 'numeric' };
     return date.toLocaleDateString(undefined, options);
   };
+
+  // Determine user permissions based on user role and task data
+  const determineUserPermissions = (userData, taskData) => {
+    // Default permissions - view only
+    let permissions = {
+      canView: true,
+      canUpdate: false,
+      canDelete: false,
+      canAssign: false,
+      canApprove: false,
+      canReject: false,
+      canComment: true  // Allow comments by default
+    };
+
+    if (!userData || !taskData) return permissions;
+
+    // Check if the user is an admin or has admin role
+    const isAdmin = userData.role === 'admin' || userData.is_admin;
+    
+    // Check if the user is the task creator
+    const isCreator = userData.id === taskData.created_by;
+    
+    // Check if the user is the assignee
+    const isAssignee = userData.id === taskData.assigned_to;
+
+    // Admin has all permissions
+    if (isAdmin) {
+      permissions = {
+        canView: true,
+        canUpdate: true,
+        canDelete: true,
+        canAssign: true,
+        canApprove: true,
+        canReject: true,
+        canComment: true
+      };
+    } 
+    // Task creator has many permissions but not all
+    else if (isCreator) {
+      permissions = {
+        canView: true,
+        canUpdate: true,
+        canDelete: true,
+        canAssign: true,
+        canApprove: true,
+        canReject: true,
+        canComment: true
+      };
+    } 
+    // Assignee has limited permissions
+    else if (isAssignee) {
+      permissions = {
+        canView: true,
+        canUpdate: true,
+        canDelete: false,
+        canAssign: false,
+        canApprove: false,
+        canReject: false,
+        canComment: true
+      };
+    }
+
+    return permissions;
+  };
+
+  // Process related tasks from task data
+  const processRelatedTasks = (taskData) => {
+    if (!taskData) return;
+    
+    setRelatedTasks({
+      prerequisites: taskData.prerequisites || [],
+      linked: taskData.linked_tasks || [],
+      dependent: taskData.dependent_tasks || []
+    });
+  };
+
+  // Fetch attachments
+  const fetchAttachments = async () => {
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const response = await axios.get(`${API_URL}/attachments/?task_id=${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setAttachments(response.data);
+    } catch (err) {
+      console.error('Error fetching attachments:', err);
+      // Don't set error state here, just use empty array
+      setAttachments([]);
+    }
+  };
+  
+  // Refresh data after updates
+  const refreshData = async () => {
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      
+      // Get task details
+      const taskResponse = await axios.get(`${API_URL}/tasks/${id}/`, { headers });
+      setTask(taskResponse.data);
+      setNewStatus(taskResponse.data.status);
+      
+      // Process related tasks
+      processRelatedTasks(taskResponse.data);
+      
+      // Update permissions based on current user and task data
+      setUserPermissions(determineUserPermissions(user, taskResponse.data));
+      
+      // Try to get comments - handle potential 403 gracefully
+      try {
+        const commentsResponse = await axios.get(`${API_URL}/comments/?task_id=${id}`, { headers });
+        setComments(commentsResponse.data);
+      } catch (commErr) {
+        console.error('Error fetching comments:', commErr);
+        // If 403, keep empty comments but don't set error
+        if (commErr.response && commErr.response.status === 403) {
+          setComments([]);
+        }
+      }
+      
+      // Try to get history - handle potential 403 gracefully
+      try {
+        const historyResponse = await axios.get(`${API_URL}/history/?task_id=${id}`, { headers });
+        setHistory(historyResponse.data);
+      } catch (histErr) {
+        console.error('Error fetching history:', histErr);
+        // If 403, keep empty history but don't set error
+        if (histErr.response && histErr.response.status === 403) {
+          setHistory([]);
+        }
+      }
+      
+      // Fetch attachments - already handles errors gracefully
+      fetchAttachments();
+      
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      toast.error('Failed to refresh task data');
+    }
+  };
   
   // Fetch task data and related information
   useEffect(() => {
@@ -124,54 +281,65 @@ const TaskDetail = () => {
         setTask(taskResponse.data);
         setNewStatus(taskResponse.data.status);
         
-        // Get comments for this task
-        const commentsResponse = await axios.get(`${API_URL}/comments/?task_id=${id}`, { headers });
-        setComments(commentsResponse.data);
+        // Process related tasks from the task details
+        processRelatedTasks(taskResponse.data);
         
-        // Get task history
-        const historyResponse = await axios.get(`${API_URL}/history/?task_id=${id}`, { headers });
-        setHistory(historyResponse.data);
+        // Set permissions based on user role and task data
+        setUserPermissions(determineUserPermissions(user, taskResponse.data));
+        
+        // Try to get comments - handle 403 gracefully
+        try {
+          const commentsResponse = await axios.get(`${API_URL}/comments/?task_id=${id}`, { headers });
+          setComments(commentsResponse.data);
+        } catch (commErr) {
+          console.error('Error fetching comments:', commErr);
+          // If 403, keep empty comments but don't set error
+          if (commErr.response && commErr.response.status === 403) {
+            setComments([]);
+          }
+        }
+        
+        // Try to get task history - handle 403 gracefully
+        try {
+          const historyResponse = await axios.get(`${API_URL}/history/?task_id=${id}`, { headers });
+          setHistory(historyResponse.data);
+        } catch (histErr) {
+          console.error('Error fetching history:', histErr);
+          // If 403, keep empty history but don't set error
+          if (histErr.response && histErr.response.status === 403) {
+            setHistory([]);
+          }
+        }
         
         // Get team members for delegation
-        const teamMembersResponse = await axios.get(`${API_URL}/team-members/`, { headers });
-        setTeamMembers(teamMembersResponse.data);
+        try {
+          const teamMembersResponse = await axios.get(`${API_URL}/team-members/`, { headers });
+          setTeamMembers(teamMembersResponse.data);
+        } catch (teamErr) {
+          console.error('Error fetching team members:', teamErr);
+          setTeamMembers([]);
+        }
         
-        // Try to get projects and handle failure silently
+        // Try to get projects
         try {
           const projectsResponse = await axios.get(`${API_URL}/projects/`, { headers });
           setProjects(projectsResponse.data);
         } catch (projectErr) {
           console.error('Error fetching projects:', projectErr);
-          // Not setting error since projects are optional
+          setProjects([]);
         }
         
-        // Try to get attachments and handle failure silently
-        try {
-          const attachmentsResponse = await axios.get(`${API_URL}/tasks/${id}/attachments/`, { headers });
-          setAttachments(attachmentsResponse.data);
-        } catch (attachErr) {
-          console.error('Error fetching attachments:', attachErr);
-          // Use empty array if attachments endpoint fails
-          setAttachments([]);
-        }
-        
-        // Try to get related tasks and handle failure silently
-        try {
-          const relatedTasksResponse = await axios.get(`${API_URL}/tasks/${id}/related/`, { headers });
-          setRelatedTasks({
-            prerequisites: relatedTasksResponse.data.prerequisites || [],
-            linked: relatedTasksResponse.data.linked || [],
-            dependent: relatedTasksResponse.data.dependent || []
-          });
-        } catch (relatedErr) {
-          console.error('Error fetching related tasks:', relatedErr);
-          // Use empty arrays if related tasks endpoint fails
-        }
+        // Fetch attachments - already handles errors gracefully
+        fetchAttachments();
         
         setError(null);
       } catch (err) {
         console.error('Error fetching task data:', err);
-        setError('Failed to load task details. Please try again later.');
+        if (err.response && err.response.status === 403) {
+          setError('You do not have permission to view this task.');
+        } else {
+          setError('Failed to load task details. Please try again later.');
+        }
       } finally {
         setLoading(false);
       }
@@ -180,7 +348,7 @@ const TaskDetail = () => {
     if (token && id) {
       fetchTaskData();
     }
-  }, [token, id]);
+  }, [token, id, user]);
   
   // Add a new comment
   const handleAddComment = async (e) => {
@@ -206,10 +374,18 @@ const TaskDetail = () => {
       // Add the new comment to the list
       setComments(prev => [...prev, response.data]);
       setNewComment('');
+      toast.success('Comment added successfully');
+      
+      // Refresh data to ensure everything is up to date
+      refreshData();
       
     } catch (err) {
       console.error('Error adding comment:', err);
-      alert('Failed to add comment. Please try again.');
+      if (err.response && err.response.status === 403) {
+        toast.error('You do not have permission to add comments to this task.');
+      } else {
+        toast.error('Failed to add comment. Please try again.');
+      }
     } finally {
       setSubmittingComment(false);
     }
@@ -220,7 +396,7 @@ const TaskDetail = () => {
     e.preventDefault();
     
     if (timeEntry.hours === 0 && timeEntry.minutes === 0) {
-      alert('Please enter time spent on the task');
+      toast.warning('Please enter time spent on the task');
       return;
     }
     
@@ -230,19 +406,38 @@ const TaskDetail = () => {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
       const totalHours = parseFloat(timeEntry.hours) + (parseFloat(timeEntry.minutes) / 60);
       
-      await axios.post(
-        `${API_URL}/tasks/${id}/add_time/`,
-        {
-          hours: totalHours.toFixed(2),
-          description: timeEntry.description
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+      // Try the dedicated time tracking endpoint first
+      try {
+        await axios.post(
+          `${API_URL}/tasks/${id}/add_time/`,
+          {
+            hours: totalHours.toFixed(2),
+            description: timeEntry.description
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           }
-        }
-      );
+        );
+      } catch (timeEndpointError) {
+        // If dedicated endpoint fails, fall back to comment approach
+        console.error('Time tracking endpoint failed, using comment fallback:', timeEndpointError);
+        
+        const commentText = `[TIME LOGGED] ${totalHours.toFixed(2)} hours spent. ${timeEntry.description || ''}`;
+        
+        await axios.post(
+          `${API_URL}/tasks/${id}/add_comment/`,
+          { text: commentText },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+      }
       
       // Reset form and close modal
       setTimeEntry({
@@ -252,27 +447,18 @@ const TaskDetail = () => {
       });
       setShowTimeModal(false);
       
-      // Refresh task details to show updated time spent
-      const taskResponse = await axios.get(`${API_URL}/tasks/${id}/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      setTask(taskResponse.data);
+      // Refresh the data
+      refreshData();
       
-      // Refresh history
-      const historyResponse = await axios.get(`${API_URL}/history/?task_id=${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      setHistory(historyResponse.data);
+      toast.success('Time entry added successfully');
       
     } catch (err) {
       console.error('Error adding time entry:', err);
-      alert('Failed to add time entry. Please try again.');
+      if (err.response && err.response.status === 403) {
+        toast.error('You do not have permission to log time for this task.');
+      } else {
+        toast.error('Failed to add time entry. Please try again.');
+      }
     } finally {
       setSubmittingTime(false);
     }
@@ -300,7 +486,7 @@ const TaskDetail = () => {
         response = await axios.post(`${API_URL}/tasks/${id}/approve/`, {}, { headers });
       } else if (newStatus === 'rejected' && task.status === 'completed') {
         if (!rejectionReason.trim()) {
-          alert('Please provide a reason for rejection');
+          toast.warning('Please provide a reason for rejection');
           setChangingStatus(false);
           return;
         }
@@ -322,13 +508,18 @@ const TaskDetail = () => {
       // Update the task in the state
       setTask(prev => ({ ...prev, status: response.data.status }));
       
-      // Refresh history
-      const historyResponse = await axios.get(`${API_URL}/history/?task_id=${id}`, { headers });
-      setHistory(historyResponse.data);
+      toast.success(`Task status updated to ${formatStatus(newStatus)}`);
+      
+      // Refresh all data
+      refreshData();
       
     } catch (err) {
       console.error('Error changing status:', err);
-      alert('Failed to change task status. Please try again.');
+      if (err.response && err.response.status === 403) {
+        toast.error('You do not have permission to change the status of this task.');
+      } else {
+        toast.error('Failed to change task status. Please try again.');
+      }
     } finally {
       setChangingStatus(false);
       setRejectionReason('');
@@ -340,7 +531,7 @@ const TaskDetail = () => {
     e.preventDefault();
     
     if (!delegateToId) {
-      alert('Please select a team member to delegate to');
+      toast.warning('Please select a team member to delegate to');
       return;
     }
     
@@ -348,34 +539,51 @@ const TaskDetail = () => {
     
     try {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-      const response = await axios.post(
-        `${API_URL}/tasks/${id}/delegate/`,
-        {
-          team_member_id: delegateToId,
-          delegation_notes: delegateNotes
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
       
-      // Update task with new assignee
-      setTask(response.data);
-      
-      // Refresh history
-      const historyResponse = await axios.get(
-        `${API_URL}/history/?task_id=${id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+      // Try with dedicated delegation endpoint first
+      try {
+        const response = await axios.post(
+          `${API_URL}/tasks/${id}/delegate/`,
+          {
+            team_member_id: delegateToId,
+            delegation_notes: delegateNotes
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           }
-        }
-      );
-      setHistory(historyResponse.data);
+        );
+        
+        // Update task with new assignee
+        setTask(response.data);
+      } catch (delegateEndpointError) {
+        // Fallback to general update if delegation endpoint fails
+        console.error('Delegation endpoint failed, using update fallback:', delegateEndpointError);
+        
+        const response = await axios.patch(
+          `${API_URL}/tasks/${id}/`,
+          {
+            assigned_to: delegateToId,
+            delegation_notes: delegateNotes
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        // Update task with new assignee
+        setTask(response.data);
+      }
+      
+      toast.success('Task delegated successfully');
+      
+      // Refresh all data
+      refreshData();
       
       // Close the modal
       setShowDelegateModal(false);
@@ -384,7 +592,11 @@ const TaskDetail = () => {
       
     } catch (err) {
       console.error('Error delegating task:', err);
-      alert('Failed to delegate task. Please try again.');
+      if (err.response && err.response.status === 403) {
+        toast.error('You do not have permission to delegate this task.');
+      } else {
+        toast.error('Failed to delegate task. Please try again.');
+      }
     } finally {
       setDelegating(false);
     }
@@ -405,38 +617,58 @@ const TaskDetail = () => {
         }
       });
       
+      toast.success('Task deleted successfully');
+      
       // Redirect to tasks list
       navigate('/dashboard/tasks');
       
     } catch (err) {
       console.error('Error deleting task:', err);
-      alert('Failed to delete task. Please try again.');
+      if (err.response && err.response.status === 403) {
+        toast.error('You do not have permission to delete this task.');
+      } else {
+        toast.error('Failed to delete task. Please try again.');
+      }
     }
   };
   
-  // Download attachment
-  const handleDownloadAttachment = async (attachmentId, fileName) => {
+  // Handle attachment viewing/download
+  const handleAttachmentAction = async (attachment) => {
     try {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
-      const response = await axios.get(`${API_URL}/attachments/${attachmentId}/download/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        responseType: 'blob'
-      });
       
-      // Create a download link and click it
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      
+      // Try specialized download endpoint first
+      try {
+        const response = await axios.get(`${API_URL}/attachments/${attachment.id}/download/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          responseType: 'blob'
+        });
+        
+        // Create a download link and click it
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', attachment.filename);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (downloadEndpointError) {
+        // Fallback to direct file access
+        console.error('Download endpoint failed, using direct view fallback:', downloadEndpointError);
+        
+        // Build the complete URL if it's a relative path
+        const fileUrl = attachment.file?.startsWith('http') 
+          ? attachment.file 
+          : `${API_URL}${attachment.file}`;
+        
+        // Open in a new tab
+        window.open(fileUrl, '_blank');
+      }
     } catch (err) {
-      console.error('Error downloading attachment:', err);
-      alert('Failed to download attachment. Please try again.');
+      console.error('Error handling attachment:', err);
+      toast.error('Failed to access attachment. Please try again.');
     }
   };
   
@@ -550,7 +782,7 @@ const TaskDetail = () => {
                 <span>Created on {new Date(task.created_at).toLocaleDateString()}</span>
                 {task.project && (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-sm font-medium bg-gray-100 text-gray-800">
-                    Project: {projects.find(p => p.id === task.project)?.name || task.project}
+                    Project: {projects.find(p => p.id === task.project)?.name || task.project_name || task.project}
                   </span>
                 )}
                 {task.due_date && (
@@ -559,9 +791,9 @@ const TaskDetail = () => {
                   </span>
                 )}
               </p>
-              {task.custom_tags && (
+              {(task.tags || task.custom_tags) && (
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {task.custom_tags.split(',').map((tag, index) => (
+                  {(task.tags || task.custom_tags || '').split(',').map((tag, index) => (
                     <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
                       {tag.trim()}
                     </span>
@@ -570,19 +802,23 @@ const TaskDetail = () => {
               )}
             </div>
             <div className="flex space-x-3">
-              <Link 
-                to={`/dashboard/tasks/${id}/edit`} 
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Edit
-              </Link>
-              <button 
-                onClick={handleDeleteTask}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                Delete
-              </button>
-            </div>
+              {userPermissions.canUpdate && (
+                <Link 
+                  to={`/dashboard/tasks/${id}/edit`} 
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Edit
+                </Link>
+              )}
+              {userPermissions.canDelete && (
+                <button 
+                  onClick={handleDeleteTask}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Delete
+                </button>
+              )}
+              </div>
           </div>
         </div>
         
@@ -643,22 +879,26 @@ const TaskDetail = () => {
                             {task.assigned_to_name?.charAt(0) || '?'}
                           </div>
                           <span>{task.assigned_to_name}</span>
-                          <button 
-                            className="ml-2 text-indigo-600 hover:text-indigo-700 text-sm"
-                            onClick={() => setShowDelegateModal(true)}
-                          >
-                            (Reassign)
-                          </button>
+                          {userPermissions.canAssign && (
+                            <button 
+                              className="ml-2 text-indigo-600 hover:text-indigo-700 text-sm"
+                              onClick={() => setShowDelegateModal(true)}
+                            >
+                              (Reassign)
+                            </button>
+                          )}
                         </>
                       ) : (
                         <>
                           <span>Unassigned</span>
-                          <button 
-                            className="ml-2 text-indigo-600 hover:text-indigo-700 text-sm"
-                            onClick={() => setShowDelegateModal(true)}
-                          >
-                            (Assign)
-                          </button>
+                          {userPermissions.canAssign && (
+                            <button 
+                              className="ml-2 text-indigo-600 hover:text-indigo-700 text-sm"
+                              onClick={() => setShowDelegateModal(true)}
+                            >
+                              (Assign)
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -795,12 +1035,12 @@ const TaskDetail = () => {
                       <div className="mb-3">
                         <h4 className="text-xs font-medium text-gray-600 mb-1">Prerequisites</h4>
                         <ul className="space-y-1 pl-5 list-disc">
-                          {relatedTasks.prerequisites.map(task => (
-                            <li key={task.id}>
-                              <Link to={`/dashboard/tasks/${task.id}`} className="text-sm text-indigo-600 hover:text-indigo-800">
-                                {task.title}
+                          {relatedTasks.prerequisites.map(relatedTask => (
+                            <li key={relatedTask.id}>
+                              <Link to={`/dashboard/tasks/${relatedTask.id}`} className="text-sm text-indigo-600 hover:text-indigo-800">
+                                {relatedTask.title}
                               </Link>
-                              <span className="text-xs text-gray-500 ml-2">({formatStatus(task.status)})</span>
+                              <span className="text-xs text-gray-500 ml-2">({formatStatus(relatedTask.status)})</span>
                             </li>
                           ))}
                         </ul>
@@ -811,12 +1051,12 @@ const TaskDetail = () => {
                       <div className="mb-3">
                         <h4 className="text-xs font-medium text-gray-600 mb-1">Linked Tasks</h4>
                         <ul className="space-y-1 pl-5 list-disc">
-                          {relatedTasks.linked.map(task => (
-                            <li key={task.id}>
-                              <Link to={`/dashboard/tasks/${task.id}`} className="text-sm text-indigo-600 hover:text-indigo-800">
-                                {task.title}
+                          {relatedTasks.linked.map(relatedTask => (
+                            <li key={relatedTask.id}>
+                              <Link to={`/dashboard/tasks/${relatedTask.id}`} className="text-sm text-indigo-600 hover:text-indigo-800">
+                                {relatedTask.title}
                               </Link>
-                              <span className="text-xs text-gray-500 ml-2">({formatStatus(task.status)})</span>
+                              <span className="text-xs text-gray-500 ml-2">({formatStatus(relatedTask.status)})</span>
                             </li>
                           ))}
                         </ul>
@@ -827,12 +1067,12 @@ const TaskDetail = () => {
                       <div>
                         <h4 className="text-xs font-medium text-gray-600 mb-1">Dependent Tasks</h4>
                         <ul className="space-y-1 pl-5 list-disc">
-                          {relatedTasks.dependent.map(task => (
-                            <li key={task.id}>
-                              <Link to={`/dashboard/tasks/${task.id}`} className="text-sm text-indigo-600 hover:text-indigo-800">
-                                {task.title}
+                          {relatedTasks.dependent.map(relatedTask => (
+                            <li key={relatedTask.id}>
+                              <Link to={`/dashboard/tasks/${relatedTask.id}`} className="text-sm text-indigo-600 hover:text-indigo-800">
+                                {relatedTask.title}
                               </Link>
-                              <span className="text-xs text-gray-500 ml-2">({formatStatus(task.status)})</span>
+                              <span className="text-xs text-gray-500 ml-2">({formatStatus(relatedTask.status)})</span>
                             </li>
                           ))}
                         </ul>
@@ -863,10 +1103,10 @@ const TaskDetail = () => {
                           </span>
                         </div>
                         <button 
-                          onClick={() => handleDownloadAttachment(attachment.id, attachment.filename)}
+                          onClick={() => handleAttachmentAction(attachment)}
                           className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
                         >
-                          Download
+                          View / Download
                         </button>
                       </li>
                     ))}
@@ -882,25 +1122,32 @@ const TaskDetail = () => {
               </div>
               <div className="p-6">
                 {/* Comment form */}
-                <form onSubmit={handleAddComment} className="mb-6">
-                  <textarea
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    placeholder="Add a comment..."
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    rows="3"
-                    required
-                  ></textarea>
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="submit"
-                      className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      disabled={submittingComment || !newComment.trim()}
-                    >
-                      {submittingComment ? 'Posting...' : 'Post Comment'}
-                    </button>
+                {userPermissions.canComment && (
+                  <form onSubmit={handleAddComment} className="mb-6">
+                    <textarea
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                      placeholder="Add a comment..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows="3"
+                      required
+                    ></textarea>
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="submit"
+                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        disabled={submittingComment || !newComment.trim()}
+                      >
+                        {submittingComment ? 'Posting...' : 'Post Comment'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {!userPermissions.canComment && (
+                  <div className="text-center py-3 bg-gray-50 rounded mb-6">
+                    <p className="text-sm text-gray-500">You don't have permission to comment on this task.</p>
                   </div>
-                </form>
+                )}
                 
                 {/* Comments list */}
                 <div className="space-y-4">
@@ -938,63 +1185,75 @@ const TaskDetail = () => {
               <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-medium text-gray-900">Actions</h2>
               </div>
+              
+              {/* Show message if no permissions for any actions */}
+              {(!userPermissions.canUpdate && !userPermissions.canAssign && !task.time_tracking_enabled) && (
+                <div className="p-6 text-center bg-gray-50">
+                  <p className="text-sm text-gray-500">You don't have permission to perform actions on this task.</p>
+                </div>
+              )}
+              
               <div className="p-6 space-y-4">
                 {/* Status change */}
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Change Status</h3>
-                  <form onSubmit={handleStatusChange}>
-                    <select
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 mb-2"
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value)}
-                      disabled={changingStatus}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="on_hold">On Hold</option>
-                      <option value="review">In Review</option>
-                      {task.status === 'completed' && (
-                        <>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                        </>
-                      )}
-                    </select>
-                    
-                    {newStatus === 'rejected' && task.status === 'completed' && (
-                      <textarea
+                {userPermissions.canUpdate && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-2">Change Status</h3>
+                    <form onSubmit={handleStatusChange}>
+                      <select
                         className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 mb-2"
-                        placeholder="Reason for rejection..."
-                        value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
-                        rows="3"
-                        required
-                      ></textarea>
-                    )}
-                    
-                    <button
-                      type="submit"
-                      className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      disabled={changingStatus || newStatus === task.status}
-                    >
-                      {changingStatus ? 'Updating...' : 'Update Status'}
-                    </button>
-                  </form>
-                </div>
+                        value={newStatus}
+                        onChange={(e) => setNewStatus(e.target.value)}
+                        disabled={changingStatus}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="on_hold">On Hold</option>
+                        <option value="review">In Review</option>
+                        {task.status === 'completed' && userPermissions.canApprove && (
+                          <option value="approved">Approved</option>
+                        )}
+                        {task.status === 'completed' && userPermissions.canReject && (
+                          <option value="rejected">Rejected</option>
+                        )}
+                      </select>
+                      
+                      {newStatus === 'rejected' && task.status === 'completed' && (
+                        <textarea
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 mb-2"
+                          placeholder="Reason for rejection..."
+                          value={rejectionReason}
+                          onChange={(e) => setRejectionReason(e.target.value)}
+                          rows="3"
+                          required
+                        ></textarea>
+                      )}
+                      
+                      <button
+                        type="submit"
+                        className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        disabled={changingStatus || newStatus === task.status}
+                      >
+                        {changingStatus ? 'Updating...' : 'Update Status'}
+                      </button>
+                    </form>
+                  </div>
+                )}
                 
                 {/* Delegate action */}
-                <div>
-                  <button
-                    onClick={() => setShowDelegateModal(true)}
-                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                  >
-                    <svg className="mr-2 -ml-1 h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    Assign/Delegate Task
-                  </button>
-                </div>
+                {userPermissions.canAssign && (
+                  <div>
+                    <button
+                      onClick={() => setShowDelegateModal(true)}
+                      className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      <svg className="mr-2 -ml-1 h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                      Assign/Delegate Task
+                    </button>
+                  </div>
+                )}
                 
                 {/* Log Time action - shown only if time tracking is enabled */}
                 {task.time_tracking_enabled && (
@@ -1231,7 +1490,7 @@ const TaskDetail = () => {
                   </button>
                 </div>
               </form>
-              </div>
+            </div>
           </div>
         )}
       </div>
