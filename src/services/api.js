@@ -13,8 +13,8 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    // Don't add auth headers for these endpoints
-    const noAuthEndpoints = ['/auth/verify-otp/', '/auth/token/', '/auth/register/'];
+    // Don't add auth headers for these endpoints - using relative paths without leading slash
+    const noAuthEndpoints = ['auth/verify-otp/', 'auth/token/', 'auth/register/'];
     const requiresAuth = !noAuthEndpoints.some(endpoint => config.url.includes(endpoint));
 
     if (requiresAuth) {
@@ -59,28 +59,28 @@ api.interceptors.response.use(
 // Auth API service
 export const authAPI = {
   login: async (email, password) => {
-    const response = await api.post('/auth/token/', { email, password });
+    const response = await api.post('auth/token/', { email, password });
     return response.data;
   },
   
   register: async (userData) => {
     console.log('API register called with:', userData);
-    const response = await api.post('/auth/register/', userData);
+    const response = await api.post('auth/register/', userData);
     return response.data;
   },
   
   getCurrentUser: async () => {
-    const response = await api.get('/auth/me/');
+    const response = await api.get('auth/me/');
     return response.data;
   },
   
   resetPassword: async (email) => {
-    const response = await api.post('/auth/password-reset/', { email });
+    const response = await api.post('auth/password-reset/', { email });
     return response.data;
   },
   
   confirmResetPassword: async (email, otp, newPassword) => {
-    const response = await api.post('/auth/password-reset-verify/', {
+    const response = await api.post('auth/password-reset-verify/', {
       email,
       otp,
       new_password: newPassword
@@ -89,17 +89,17 @@ export const authAPI = {
   },
   
   refreshToken: async (refreshToken) => {
-    const response = await api.post('/auth/token/refresh/', { refresh: refreshToken });
+    const response = await api.post('auth/token/refresh/', { refresh: refreshToken });
     return response.data;
   },
 
   verifyOtp: async (email, otp) => {
-    const response = await api.post('/auth/verify-otp/', { email, otp });
+    const response = await api.post('auth/verify-otp/', { email, otp });
     return response.data;
   },
 
   acceptInvitation: async (token, password) => {
-    const response = await api.post(`/auth/invitation/${token}/`, {
+    const response = await api.post(`auth/invitation/${token}/`, {
       password: password
     });
     return response.data;
@@ -109,7 +109,7 @@ export const authAPI = {
     // If tempToken is provided, use it in headers
     const headers = tempToken ? { Authorization: `Bearer ${tempToken}` } : {};
     
-    const response = await api.post('/auth/set-password/', 
+    const response = await api.post('auth/set-password/', 
       { email, new_password: newPassword },
       { headers }
     );
@@ -117,7 +117,7 @@ export const authAPI = {
   },
 
   sendTeamInvite: async (email, role, title) => {
-    const response = await api.post('/auth/send-invite/', { 
+    const response = await api.post('auth/send-invite/', { 
       email, 
       role, 
       title,
@@ -130,17 +130,17 @@ export const authAPI = {
 // Organization API service
 export const organizationAPI = {
   createOrganization: async (organizationData) => {
-    const response = await api.post('/organizations/', organizationData);
+    const response = await api.post('organizations/', organizationData);
     return response.data;
   },
   
   getOrganization: async () => {
-    const response = await api.get('/organizations/');
+    const response = await api.get('organizations/');
     return response.data;
   },
   
   updateOrganization: async (id, organizationData) => {
-    const response = await api.patch(`/organizations/${id}/`, organizationData);
+    const response = await api.patch(`organizations/${id}/`, organizationData);
     return response.data;
   },
 };
@@ -148,17 +148,17 @@ export const organizationAPI = {
 // Team Members API service
 export const teamMembersAPI = {
   getTeamMembers: async () => {
-    const response = await api.get('/team-members/');
+    const response = await api.get('team-members/');
     return response.data;
   },
   
   addTeamMember: async (memberData) => {
-    const response = await api.post('/team-members/', memberData);
+    const response = await api.post('team-members/', memberData);
     return response.data;
   },
   
   removeTeamMember: async (id) => {
-    const response = await api.delete(`/team-members/${id}/`);
+    const response = await api.delete(`team-members/${id}/`);
     return response.data;
   },
 };
@@ -166,17 +166,17 @@ export const teamMembersAPI = {
 // Titles API service
 export const titlesAPI = {
   getTitles: async () => {
-    const response = await api.get('/titles/');
+    const response = await api.get('titles/');
     return response.data;
   },
   
   createTitle: async (titleData) => {
-    const response = await api.post('/titles/', titleData);
+    const response = await api.post('titles/', titleData);
     return response.data;
   },
   
   deleteTitle: async (id) => {
-    const response = await api.delete(`/titles/${id}/`);
+    const response = await api.delete(`titles/${id}/`);
     return response.data;
   },
 };
@@ -184,22 +184,22 @@ export const titlesAPI = {
 // Roles API service
 export const rolesAPI = {
   getRoles: async () => {
-    const response = await api.get('/roles/');
+    const response = await api.get('roles/');
     return response.data;
   },
   
   createRole: async (roleData) => {
-    const response = await api.post('/roles/', roleData);
+    const response = await api.post('roles/', roleData);
     return response.data;
   },
   
   updateRole: async (id, roleData) => {
-    const response = await api.patch(`/roles/${id}/`, roleData);
+    const response = await api.patch(`roles/${id}/`, roleData);
     return response.data;
   },
   
   deleteRole: async (id) => {
-    const response = await api.delete(`/roles/${id}/`);
+    const response = await api.delete(`roles/${id}/`);
     return response.data;
   },
 };
@@ -212,7 +212,7 @@ export const roleAPI = rolesAPI;
 // Permissions API service
 export const permissionAPI = {
   getPermissions: async () => {
-    const response = await api.get('/permissions/');
+    const response = await api.get('permissions/');
     return response.data;
   },
 };
@@ -226,37 +226,37 @@ export const taskAPI = {
       if (value) queryParams.append(key, value);
     });
     
-    const response = await api.get(`/tasks/?${queryParams.toString()}`);
+    const response = await api.get(`tasks/?${queryParams.toString()}`);
     return response.data;
   },
   
   getTask: async (id) => {
-    const response = await api.get(`/tasks/${id}/`);
+    const response = await api.get(`tasks/${id}/`);
     return response.data;
   },
   
   createTask: async (taskData) => {
-    const response = await api.post('/tasks/', taskData);
+    const response = await api.post('tasks/', taskData);
     return response.data;
   },
   
   updateTask: async (id, taskData) => {
-    const response = await api.patch(`/tasks/${id}/`, taskData);
+    const response = await api.patch(`tasks/${id}/`, taskData);
     return response.data;
   },
   
   deleteTask: async (id) => {
-    const response = await api.delete(`/tasks/${id}/`);
+    const response = await api.delete(`tasks/${id}/`);
     return response.data;
   },
   
   assignTask: async (id, teamMemberId) => {
-    const response = await api.post(`/tasks/${id}/assign/`, { team_member_id: teamMemberId });
+    const response = await api.post(`tasks/${id}/assign/`, { team_member_id: teamMemberId });
     return response.data;
   },
   
   delegateTask: async (id, teamMemberId, delegationNotes = '') => {
-    const response = await api.post(`/tasks/${id}/delegate/`, {
+    const response = await api.post(`tasks/${id}/delegate/`, {
       team_member_id: teamMemberId,
       delegation_notes: delegationNotes
     });
@@ -264,17 +264,17 @@ export const taskAPI = {
   },
   
   approveTask: async (id) => {
-    const response = await api.post(`/tasks/${id}/approve/`, {});
+    const response = await api.post(`tasks/${id}/approve/`, {});
     return response.data;
   },
   
   rejectTask: async (id, rejectionReason) => {
-    const response = await api.post(`/tasks/${id}/reject/`, { rejection_reason: rejectionReason });
+    const response = await api.post(`tasks/${id}/reject/`, { rejection_reason: rejectionReason });
     return response.data;
   },
   
   addComment: async (id, text) => {
-    const response = await api.post(`/tasks/${id}/add_comment/`, { text });
+    const response = await api.post(`tasks/${id}/add_comment/`, { text });
     return response.data;
   },
   
@@ -282,7 +282,7 @@ export const taskAPI = {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await api.post(`/tasks/${id}/add_attachment/`, formData, {
+    const response = await api.post(`tasks/${id}/add_attachment/`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -294,23 +294,23 @@ export const taskAPI = {
 // Comments API service
 export const commentAPI = {
   getComments: async (taskId = null) => {
-    const url = taskId ? `/comments/?task_id=${taskId}` : '/comments/';
+    const url = taskId ? `comments/?task_id=${taskId}` : 'comments/';
     const response = await api.get(url);
     return response.data;
   },
   
   createComment: async (commentData) => {
-    const response = await api.post('/comments/', commentData);
+    const response = await api.post('comments/', commentData);
     return response.data;
   },
   
   updateComment: async (id, commentData) => {
-    const response = await api.put(`/comments/${id}/`, commentData);
+    const response = await api.put(`comments/${id}/`, commentData);
     return response.data;
   },
   
   deleteComment: async (id) => {
-    const response = await api.delete(`/comments/${id}/`);
+    const response = await api.delete(`comments/${id}/`);
     return response.data;
   },
 };
@@ -318,7 +318,7 @@ export const commentAPI = {
 // Task history API service
 export const historyAPI = {
   getTaskHistory: async (taskId = null) => {
-    const url = taskId ? `/history/?task_id=${taskId}` : '/history/';
+    const url = taskId ? `history/?task_id=${taskId}` : 'history/';
     const response = await api.get(url);
     return response.data;
   },
@@ -327,12 +327,12 @@ export const historyAPI = {
 // Onboarding API service
 export const onboardingAPI = {
   getOnboardingData: async () => {
-    const response = await api.get('/onboarding/data/');
+    const response = await api.get('onboarding/data/');
     return response.data;
   },
   
   completeOnboarding: async () => {
-    const response = await api.post('/onboarding/complete/');
+    const response = await api.post('onboarding/complete/');
     return response.data;
   },
 };

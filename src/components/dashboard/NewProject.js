@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
 
 const NewProject = () => {
   const { token } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { id } = useParams(); // Get project ID from URL
+  const isEditMode = Boolean(id);
   
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(false);
   const [error, setError] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
@@ -29,7 +32,7 @@ const NewProject = () => {
     const fetchInitialData = async () => {
       try {
         setLoading(true);
-        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        const API_URL = process.env.REACT_APP_API_URL || '/api/v1';
         const authToken = token || localStorage.getItem('token');
         
         const headers = {
@@ -65,6 +68,71 @@ const NewProject = () => {
     fetchInitialData();
   }, [token]);
 
+  // Fetch project data if in edit mode
+  useEffect(() => {
+    const fetchProjectData = async () => {
+      if (!isEditMode || !token) return;
+      
+      try {
+        setFetchLoading(true);
+        const API_URL = process.env.REACT_APP_API_URL || '/api/v1';
+        const authToken = token || localStorage.getItem('token');
+        
+        const headers = {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        };
+        
+        // Get project details
+        const projectResponse = await axios.get(`${API_URL}/projects/${id}/`, { headers });
+        const project = projectResponse.data;
+        
+        // Format dates for form inputs (YYYY-MM-DD)
+        const formatDate = (dateString) => {
+          if (!dateString) return '';
+          return new Date(dateString).toISOString().split('T')[0];
+        };
+        
+        // Set form data from project
+        setProjectData({
+          name: project.name || '',
+          description: project.description || '',
+          start_date: formatDate(project.start_date),
+          end_date: formatDate(project.end_date),
+          status: project.status || 'planning',
+          priority: project.priority || 'medium'
+        });
+        
+        // Set selected organization
+        if (project.organization) {
+          setSelectedOrg(project.organization);
+        }
+        
+        // Get team members for this project
+        try {
+          const membersResponse = await axios.get(`${API_URL}/projects/${id}/team-members/`, { headers });
+          const projectMembers = membersResponse.data;
+          
+          // Set selected team members
+          if (projectMembers && projectMembers.length > 0) {
+            const memberIds = projectMembers.map(member => member.id);
+            setSelectedMembers(memberIds);
+          }
+        } catch (memberErr) {
+          console.error('Error fetching project team members:', memberErr);
+        }
+        
+      } catch (err) {
+        console.error('Error fetching project data:', err);
+        setError('Failed to load project details. Please try again later.');
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+    
+    fetchProjectData();
+  }, [id, isEditMode, token]);
+
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -98,7 +166,7 @@ const NewProject = () => {
       setLoading(true);
       setError(null);
       
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+      const API_URL = process.env.REACT_APP_API_URL || '/api/v1';
       const authToken = token || localStorage.getItem('token');
       
       const headers = {
@@ -127,15 +195,28 @@ const NewProject = () => {
       
       console.log("Project data being sent:", JSON.stringify(formattedData));
       
-      // Create the project
-      const response = await axios.post(
-        `${API_URL}/projects/`, 
-        formattedData, 
-        { headers }
-      );
+      let response;
+      let projectId;
       
-      const projectId = response.data.id;
-      console.log("Project created with ID:", projectId);
+      if (isEditMode) {
+        // Update existing project
+        response = await axios.patch(
+          `${API_URL}/projects/${id}/`, 
+          formattedData, 
+          { headers }
+        );
+        projectId = id;
+      } else {
+        // Create new project
+        response = await axios.post(
+          `${API_URL}/projects/`, 
+          formattedData, 
+          { headers }
+        );
+        projectId = response.data.id;
+      }
+      
+      console.log(isEditMode ? "Project updated with ID:" : "Project created with ID:", projectId);
       
       // Add team members to the project if any are selected
       if (selectedMembers.length > 0 && projectId) {
@@ -160,11 +241,13 @@ const NewProject = () => {
       }, 500);
       
     } catch (err) {
-      console.error("Error creating project:", err);
+      console.error("Error saving project:", err);
       console.error("Response data:", err.response?.data);
       
       // Extract error message from response if available
-      let errorMessage = "Failed to create project. Please check your inputs and try again.";
+      let errorMessage = isEditMode 
+        ? "Failed to update project. Please check your inputs and try again."
+        : "Failed to create project. Please check your inputs and try again.";
       
       if (err.response?.data) {
         if (typeof err.response.data === 'string') {
@@ -204,16 +287,30 @@ const NewProject = () => {
     return groups;
   }, {});
 
+  if (fetchLoading) {
+    return (
+      <div className="py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="md:flex md:items-center md:justify-between mb-6">
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-gray-900">
-              Create New Project
+              {isEditMode ? 'Edit Project' : 'Create New Project'}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Add a new project to organize and track related tasks.
+              {isEditMode 
+                ? 'Update project information and team assignments.'
+                : 'Add a new project to organize and track related tasks.'}
             </p>
           </div>
         </div>
@@ -248,6 +345,7 @@ const NewProject = () => {
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                       value={selectedOrg || ''}
                       onChange={handleOrgChange}
+                      disabled={isEditMode} // Disable organization change in edit mode
                     >
                       {organizations.map(org => (
                         <option key={org.id} value={org.id}>
@@ -367,9 +465,13 @@ const NewProject = () => {
               
               {/* Team Members Section */}
               <div className="mt-8">
-                <h3 className="text-lg font-medium text-gray-900">Assign Team Members</h3>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {isEditMode ? 'Update Team Members' : 'Assign Team Members'}
+                </h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  Select the team members who will work on this project
+                  {isEditMode 
+                    ? 'Modify the team members assigned to this project'
+                    : 'Select the team members who will work on this project'}
                 </p>
                 
                 {loading && teamMembers.length === 0 ? (
@@ -454,9 +556,9 @@ const NewProject = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Creating...
+                    {isEditMode ? 'Updating...' : 'Creating...'}
                   </>
-                ) : "Create Project"}
+                ) : (isEditMode ? "Update Project" : "Create Project")}
               </button>
             </div>
           </form>
