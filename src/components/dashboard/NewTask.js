@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import axios from 'axios';
 import { toast } from 'react-toastify';
@@ -7,13 +7,17 @@ import { toast } from 'react-toastify';
 const TaskCreateForm = () => {
   const { token } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { id } = useParams(); // Get the task ID if we're in edit mode
   
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [teamMembers, setTeamMembers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [existingTasks, setExistingTasks] = useState([]);
+  
+  const isEditMode = Boolean(id);
   
   // Form state with ALL fields supported by the backend
   const [formData, setFormData] = useState({
@@ -108,6 +112,72 @@ const TaskCreateForm = () => {
 
     fetchData();
   }, [token]);
+  
+  // Fetch task data if we're in edit mode
+  useEffect(() => {
+    const fetchTaskData = async () => {
+      if (!isEditMode) return;
+      
+      try {
+        setFetchLoading(true);
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+        
+        const response = await axios.get(`${API_URL}/tasks/${id}/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const task = response.data;
+        
+        // Format dates to YYYY-MM-DD for input fields
+        const formatDate = (dateString) => {
+          if (!dateString) return '';
+          return new Date(dateString).toISOString().split('T')[0];
+        };
+        
+        setFormData({
+          title: task.title || '',
+          description: task.description || '',
+          priority: task.priority || 'medium',
+          category: task.category || 'general',
+          start_date: formatDate(task.start_date),
+          due_date: formatDate(task.due_date),
+          estimated_hours: task.estimated_hours || '',
+          is_recurring: task.is_recurring || false,
+          recurring_frequency: task.recurring_frequency || 'weekly',
+          recurring_ends_on: formatDate(task.recurring_ends_on),
+          organization: task.organization || '',
+          project: task.project || '',
+          visibility: task.visibility || 'team',
+          acceptance_criteria: task.acceptance_criteria || '',
+          tags: task.tags || '',
+          notes: task.notes || '',
+          time_tracking_enabled: task.time_tracking_enabled || false,
+          budget_hours: task.budget_hours || '',
+          is_billable: task.is_billable || false,
+          client_reference: task.client_reference || '',
+          assigned_to: task.assigned_to || '',
+          assignees: task.assignees || [],
+          approvers: task.approvers || [],
+          watchers: task.watchers || [],
+          prerequisites: task.prerequisites || [],
+          linked_tasks: task.linked_tasks || [],
+          attachments: []
+        });
+        
+      } catch (err) {
+        console.error('Error fetching task data:', err);
+        setError('Failed to load task data. Please try again.');
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+
+    if (token) {
+      fetchTaskData();
+    }
+  }, [id, isEditMode, token]);
   
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -287,13 +357,24 @@ const TaskCreateForm = () => {
         taskData.linked_tasks = formData.linked_tasks;
       }
       
-      // Create the task
-      const response = await axios.post(`${API_URL}/tasks/`, taskData, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      let response;
+      if (isEditMode) {
+        // Update existing task
+        response = await axios.patch(`${API_URL}/tasks/${id}/`, taskData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      } else {
+        // Create new task
+        response = await axios.post(`${API_URL}/tasks/`, taskData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
       
       setSuccess(true);
       
@@ -321,21 +402,27 @@ const TaskCreateForm = () => {
       }
       
       // Show success toast
-      toast.success('Task created successfully!');
+      toast.success(isEditMode ? 'Task updated successfully!' : 'Task created successfully!');
       
-      // Navigate to task detail page after successful creation
+      // Navigate to task detail page after successful operation
       setTimeout(() => {
-        navigate(`/tasks/${response.data.id}`);
+        navigate(`/dashboard/tasks/${response.data.id}`);
       }, 1500);
       
     } catch (err) {
-      console.error('Error creating task:', err);
-      setError(err.response?.data?.detail || 
-               err.response?.data?.message || 
-               'Failed to create task. Please try again.');
+      console.error('Error saving task:', err);
+      setError(isEditMode ? 'Failed to update task. Please try again.' : 'Failed to create task. Please try again.');
       setLoading(false);
     }
   };
+  
+  if (fetchLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
   
   return (
     <div className="py-6">
@@ -344,10 +431,10 @@ const TaskCreateForm = () => {
         <div className="md:flex md:items-center md:justify-between mb-6">
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-bold text-gray-900">
-              Create New Task
+              {isEditMode ? 'Edit Task' : 'Create New Task'}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              Add a new task with all the details needed for successful completion.
+              {isEditMode ? 'Update the task details below.' : 'Add a new task with all the details needed for successful completion.'}
             </p>
           </div>
         </div>
@@ -381,7 +468,9 @@ const TaskCreateForm = () => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-green-700">Task created successfully! You will be redirected to the task details page.</p>
+                    <p className="text-sm text-green-700">
+                      {isEditMode ? 'Task updated successfully!' : 'Task created successfully!'} You will be redirected to the task details page.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -640,7 +729,7 @@ const TaskCreateForm = () => {
                             <option value="biweekly">Bi-weekly</option>
                             <option value="monthly">Monthly</option>
                             <option value="quarterly">Quarterly</option>
-                          </select>
+                            </select>
                         </div>
                         
                         <div>
@@ -1121,7 +1210,7 @@ const TaskCreateForm = () => {
                 <button
                   type="button"
                   className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                  onClick={() => navigate('/tasks')}
+                  onClick={() => navigate('/dashboard/tasks')}
                 >
                   Cancel
                 </button>
@@ -1136,16 +1225,16 @@ const TaskCreateForm = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Creating...
+                      {isEditMode ? 'Updating...' : 'Creating...'}
                     </>
                   ) : success ? (
                     <>
                       <svg className="h-4 w-4 mr-1 text-white inline" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
-                      Task Created
+                      {isEditMode ? 'Task Updated' : 'Task Created'}
                     </>
-                  ) : 'Create Task'}
+                  ) : isEditMode ? 'Update Task' : 'Create Task'}
                 </button>
               </div>
             </div>
