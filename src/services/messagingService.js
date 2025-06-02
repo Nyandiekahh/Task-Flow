@@ -152,10 +152,9 @@ export const getPinnedMessages = (conversationId) => {
   });
 };
 
-export const sendTypingIndicator = (messageId) => {
-  if (!messageId) {
-    return Promise.reject(new Error('Message ID is required'));
-  }
-  
-  return api.post(`/messaging/messages/${messageId}/typing/`);
+export const sendTypingIndicator = (conversationId) => {
+  // Your backend expects /messages/{messageId}/typing/ but frontend sends conversationId
+  // This causes 500 errors. Disable for now.
+  console.warn('Typing indicator disabled - backend expects messageId, frontend sends conversationId');
+  return Promise.resolve(); // Return resolved promise to prevent errors
 };

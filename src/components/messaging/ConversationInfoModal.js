@@ -4,14 +4,14 @@ import { AuthContext } from '../../context/AuthContext';
 import { addParticipant, removeParticipant } from '../../services/messagingService';
 
 const ConversationInfoModal = ({ conversation, onClose }) => {
-  const { user } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
   const [showAddParticipant, setShowAddParticipant] = useState(false);
   const [newParticipantEmail, setNewParticipantEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   // Early return for loading state
-  if (!conversation || !conversation.participants || !user) {
+  if (!conversation || !conversation.participants || !currentUser) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6">
@@ -23,7 +23,7 @@ const ConversationInfoModal = ({ conversation, onClose }) => {
 
   // Check if current user is admin with proper null checks
   const isAdmin = conversation.participants.some(
-    p => p?.user?.id === user?.id && p?.is_admin
+    p => p?.user?.id === currentUser?.id && p?.is_admin
   );
 
   const handleAddParticipant = async (e) => {
@@ -70,7 +70,7 @@ const ConversationInfoModal = ({ conversation, onClose }) => {
     }
 
     try {
-      await removeParticipant(conversation.id, user.id);
+      await removeParticipant(conversation.id, currentUser.id);
       onClose();
       // Redirect or refresh the conversation list
     } catch (error) {
@@ -151,7 +151,7 @@ const ConversationInfoModal = ({ conversation, onClose }) => {
                     </div>
                     <div>
                       <p className="font-medium">
-                        {participant?.user?.id === user?.id 
+                        {participant?.user?.id === currentUser?.id 
                           ? 'You' 
                           : participant?.user?.first_name && participant?.user?.last_name 
                             ? `${participant.user.first_name} ${participant.user.last_name}` 
@@ -163,7 +163,7 @@ const ConversationInfoModal = ({ conversation, onClose }) => {
                   </div>
                   
                   {/* Remove participant button (show only if admin and not for current user) */}
-                  {isAdmin && participant?.user?.id !== user?.id && (
+                  {isAdmin && participant?.user?.id !== currentUser?.id && (
                     <button
                       onClick={() => handleRemoveParticipant(participant?.user?.id)}
                       className="text-red-500 hover:text-red-700"

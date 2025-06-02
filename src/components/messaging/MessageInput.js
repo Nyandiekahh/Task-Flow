@@ -1,6 +1,6 @@
 // src/components/messaging/MessageInput.js
 import React, { useState, useRef } from 'react';
-import { sendMessage, sendMessageWithAttachments, sendTypingIndicator } from '../../services/messagingService';
+import { sendMessage, sendMessageWithAttachments } from '../../services/messagingService';
 
 const MessageInput = ({ conversationId, onSendMessage }) => {
   const [content, setContent] = useState('');
@@ -11,15 +11,12 @@ const MessageInput = ({ conversationId, onSendMessage }) => {
   // Track typing state and inform server
   let typingTimeout = null;
   const handleTyping = () => {
-    if (conversationId) {
-      clearTimeout(typingTimeout);
-      sendTypingIndicator(conversationId).catch(err => console.error('Error sending typing indicator:', err));
-      
-      // Clear typing status after 3 seconds of no typing
-      typingTimeout = setTimeout(() => {
-        // You could send a "stopped typing" signal here if your backend supports it
-      }, 3000);
-    }
+    // Temporarily disable typing indicators to prevent 500 errors
+    // Your backend expects POST /messages/{messageId}/typing/ but we're sending conversationId
+    console.log('Typing indicator disabled to prevent 500 errors');
+    
+    // TODO: Implement proper typing when backend supports conversation-level typing
+    // or when we have the correct message ID to send to
   };
   
   const handleAttachFile = () => {

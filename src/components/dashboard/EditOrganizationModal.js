@@ -1,14 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const EditOrganizationModal = ({ organization, isOpen, onClose, onUpdate, token }) => {
+  // Handle both array and object formats
+  const orgData = Array.isArray(organization) ? organization[0] : organization;
+  
   const [formData, setFormData] = useState({
-    name: organization?.name || '',
-    industry: organization?.industry || '',
-    size: organization?.size || 'small'
+    name: '',
+    industry: '',
+    size: 'small'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Update form data when organization prop changes
+  useEffect(() => {
+    if (orgData) {
+      setFormData({
+        name: orgData.name || '',
+        industry: orgData.industry || '',
+        size: orgData.size || 'small'
+      });
+    }
+  }, [orgData]);
 
   if (!isOpen) return null;
 
@@ -32,17 +46,28 @@ const EditOrganizationModal = ({ organization, isOpen, onClose, onUpdate, token 
         'Content-Type': 'application/json'
       };
 
-      const response = await axios.patch(
-        `${API_URL}/organizations/${organization.id}/`, 
-        formData,
-        { headers }
-      );
+      let response;
+      
+      // If organization exists, update it; otherwise create new one
+      if (orgData && orgData.id) {
+        response = await axios.patch(
+          `${API_URL}/organizations/${orgData.id}/`, 
+          formData,
+          { headers }
+        );
+      } else {
+        response = await axios.post(
+          `${API_URL}/organizations/`, 
+          formData,
+          { headers }
+        );
+      }
 
       onUpdate(response.data);
       onClose();
     } catch (err) {
-      console.error('Error updating organization:', err);
-      setError('Failed to update organization. Please try again.');
+      console.error('Error saving organization:', err);
+      setError('Failed to save organization. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -62,7 +87,7 @@ const EditOrganizationModal = ({ organization, isOpen, onClose, onUpdate, token 
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
                 <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                  Edit Organization
+                  {orgData && orgData.id ? 'Edit Organization' : 'Create Organization'}
                 </h3>
                 
                 {error && (
@@ -142,9 +167,9 @@ const EditOrganizationModal = ({ organization, isOpen, onClose, onUpdate, token 
                       <button
                         type="submit"
                         disabled={loading}
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:bg-gray-400"
                       >
-                        {loading ? 'Saving...' : 'Save Changes'}
+                        {loading ? 'Saving...' : (orgData && orgData.id ? 'Save Changes' : 'Create Organization')}
                       </button>
                     </div>
                   </form>

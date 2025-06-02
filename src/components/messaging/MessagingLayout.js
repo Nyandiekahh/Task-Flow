@@ -45,14 +45,14 @@ const MessagingLayout = () => {
   // Effect to set default organization
   useEffect(() => {
     console.log("Current user object:", currentUser);
-    if (currentUser && currentUser.organizations && currentUser.organizations.length > 0) {
-      console.log("Setting organization ID:", currentUser.organizations[0].id);
-      setSelectedOrganizationId(currentUser.organizations[0].id);
+    if (currentUser && currentUser.organization) {
+      // User has organization as a single ID, not an array
+      console.log("Setting organization ID:", currentUser.organization);
+      setSelectedOrganizationId(currentUser.organization);
     } else {
-      console.log("No organizations found in user object or user is:", currentUser);
-      
-      // Temporary hardcoded ID for testing
-      const hardcodedOrgId = 1; // Use a valid ID from your database
+      console.log("No organization found in user object");
+      // Fallback to hardcoded ID only if no organization exists
+      const hardcodedOrgId = 1;
       console.log("Setting hardcoded organization ID:", hardcodedOrgId);
       setSelectedOrganizationId(hardcodedOrgId);
     }

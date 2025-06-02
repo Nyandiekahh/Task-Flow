@@ -13,7 +13,7 @@ import ConversationHeader from './ConversationHeader';
 import PinnedMessages from './PinnedMessages';
 
 const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
-  const { user } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [pinnedMessages, setPinnedMessages] = useState([]);
@@ -55,10 +55,10 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
       setHasMore(!!response?.data?.next);
       
       // Mark messages as read automatically with proper null checks
-      if (user && user.id) {
+      if (currentUser && currentUser.id) {
         newMessages.forEach(message => {
-          if (message?.sender?.id !== user?.id && 
-              !message?.read_by?.some(read => read?.user?.id === user?.id)) {
+          if (message?.sender?.id !== currentUser?.id && 
+              !message?.read_by?.some(read => read?.user?.id === currentUser?.id)) {
             markAsRead(message.id);
           }
         });
@@ -81,7 +81,14 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
       const response = await getPinnedMessages(conversationId);
       setPinnedMessages(response?.data || []);
     } catch (error) {
-      console.error('Error fetching pinned messages:', error);
+      if (error.response?.status === 404) {
+        // 404 is normal when no messages are pinned
+        console.log('No pinned messages found for conversation');
+        setPinnedMessages([]);
+      } else {
+        console.error('Error fetching pinned messages:', error);
+        setPinnedMessages([]);
+      }
     }
   };
   
@@ -132,15 +139,15 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
   };
   
   const handleSendMessage = (newMessage) => {
-    if (!user || !conversationId) return;
+    if (!currentUser || !conversationId) return;
     
     setMessages(prevMessages => [...prevMessages, {
       ...newMessage,
       conversation: parseInt(conversationId),
       read_by: [{
-        user: user
+        user: currentUser
       }],
-      sender: user,
+      sender: currentUser,
       reactions: [],
       attachments: []
     }]);
@@ -215,7 +222,7 @@ const ConversationDetail = ({ conversationId, onConversationUpdate }) => {
         
         <MessageList 
           messages={messages} 
-          currentUser={user} 
+          currentUser={currentUser} 
           onPinUnpinMessage={handlePinUnpinMessage}
         />
         

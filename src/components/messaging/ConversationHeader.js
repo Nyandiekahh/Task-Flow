@@ -4,11 +4,11 @@ import { AuthContext } from '../../context/AuthContext';
 import ConversationInfoModal from './ConversationInfoModal';
 
 const ConversationHeader = ({ conversation, pinnedMessages, togglePinnedMessages }) => {
-  const { user } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
   const [showInfo, setShowInfo] = useState(false);
   
   // Early return for loading state if data isn't available
-  if (!conversation || !conversation.participants || !user) {
+  if (!conversation || !conversation.participants || !currentUser) {
     return (
       <div className="border-b p-4 flex items-center justify-between bg-white">
         <div className="flex items-center">
@@ -31,7 +31,7 @@ const ConversationHeader = ({ conversation, pinnedMessages, togglePinnedMessages
     
     // For direct messages, show the other person's name
     const otherParticipant = conversation?.participants?.find(
-      p => p?.user?.id !== user?.id
+      p => p?.user?.id !== currentUser?.id
     );
     
     if (otherParticipant) {
@@ -65,7 +65,7 @@ const ConversationHeader = ({ conversation, pinnedMessages, togglePinnedMessages
         ) : (
           <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center mr-3">
             {/* Show first letter of other participant's name with proper null checks */}
-            {conversation?.participants?.find(p => p?.user?.id !== user?.id)?.user?.first_name?.[0]?.toUpperCase() || '?'}
+            {conversation?.participants?.find(p => p?.user?.id !== currentUser?.id)?.user?.first_name?.[0]?.toUpperCase() || '?'}
           </div>
         )}
         
