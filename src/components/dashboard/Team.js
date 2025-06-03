@@ -152,7 +152,7 @@ const Team = () => {
         'Content-Type': 'application/json'
       };
       
-      const response = await fetch(`${API_URL}/titles/available_permissions/`, { 
+      const response = await fetch(`${API_URL}/permissions/`, { 
         method: 'GET',
         headers 
       });
@@ -253,7 +253,7 @@ const Team = () => {
     setInvites(updatedInvites);
   };
 
-  // Handle invite form submission with OTP using existing endpoint
+  // Handle invite form submission with OTP using existing endpoint - UPDATED VERSION
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
     
@@ -287,16 +287,24 @@ const Team = () => {
         'Content-Type': 'application/json'
       };
       
-      // Trim and validate invites
+      // Trim and validate invites with proper title information
       const validInvites = invites
         .filter(invite => invite.email.trim() !== '')
-        .map(invite => ({
-          email: invite.email.trim(),
-          name: invite.name?.trim() || '',
-          role: invite.role  // Use the title ID
-        }));
+        .map(invite => {
+          // Find the title details
+          const selectedTitle = titles.find(title => title.id === parseInt(invite.role));
+          
+          return {
+            email: invite.email.trim(),
+            name: invite.name?.trim() || '',
+            role: invite.role,  // Title ID for backward compatibility
+            title_id: parseInt(invite.role), // Explicit title ID
+            title_name: selectedTitle ? selectedTitle.name : 'Unknown Title', // Title name for display
+            title_description: selectedTitle ? selectedTitle.description : ''
+          };
+        });
       
-      console.log('Sending invites:', validInvites);
+      console.log('Sending invites with title details:', validInvites);
       
       const response = await fetch(`${API_URL}/auth/invite/`, {
         method: 'POST',
