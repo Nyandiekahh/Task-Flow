@@ -136,6 +136,7 @@ const OnboardingLayout = () => {
           <button
             onClick={() => {
               prevStep();
+              // FIXED: Use currentStep - 2 for previous step (0-indexed array)
               const prevPath = steps[currentStep - 2]?.path || '/signup';
               navigate(prevPath);
             }}
@@ -149,6 +150,7 @@ const OnboardingLayout = () => {
             <button
               onClick={() => {
                 nextStep();
+                // FIXED: Use currentStep (after increment) for next step (0-indexed array)
                 const nextPath = steps[currentStep]?.path;
                 if (nextPath) navigate(nextPath);
               }}

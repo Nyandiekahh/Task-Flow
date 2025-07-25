@@ -6,7 +6,7 @@ import { Formik, Form, Field, ErrorMessage, FieldArray } from 'formik';
 import * as Yup from 'yup';
 import { motion, AnimatePresence } from 'framer-motion';
 import { OnboardingContext } from '../../context/OnboardingContext';
-import { rolesAPI } from '../../services/api';
+import { permissionAPI } from '../../services/api';
 
 const validationSchema = Yup.object({
   permissions: Yup.array().min(1, 'Select at least one permission')
@@ -33,6 +33,9 @@ const Step3Roles = () => {
       }, 2000);
       
       return () => clearTimeout(timer);
+    } else {
+      // Clear error if organization exists
+      setError(null);
     }
   }, [onboardingData.organization, navigate]);
   
@@ -41,23 +44,31 @@ const Step3Roles = () => {
     const fetchPermissions = async () => {
       try {
         setLoading(true);
-        const permissions = await rolesAPI.getPermissions();
+        setError(null);
+        
+        // Use permissionAPI instead of rolesAPI for consistency
+        const permissions = await permissionAPI.getPermissions();
         setAllPermissions(permissions);
+        console.log('Fetched permissions:', permissions);
       } catch (err) {
-        setError('Failed to load permissions: ' + err.message);
         console.error('Error fetching permissions:', err);
+        setError('Failed to load permissions: ' + (err.message || 'Unknown error'));
       } finally {
         setLoading(false);
       }
     };
     
-    fetchPermissions();
-  }, []);
+    // Only fetch permissions if organization exists
+    if (onboardingData.organization && onboardingData.organization.id) {
+      fetchPermissions();
+    }
+  }, [onboardingData.organization]);
   
   // Extract titles and map them to permissions
   useEffect(() => {
     if (!titles || titles.length === 0) {
       console.log('No titles available yet');
+      setTitlesWithPermissions([]);
       return;
     }
 
@@ -87,8 +98,10 @@ const Step3Roles = () => {
     setTitlesWithPermissions(mappedTitles);
   }, [titles, onboardingData.roles]);
 
-  const handleUpdatePermissions = async (values, { resetForm }) => {
+  const handleUpdatePermissions = async (values, { resetForm, setSubmitting }) => {
     try {
+      setError(null);
+      
       // Check if organization exists
       if (!onboardingData.organization || !onboardingData.organization.id) {
         throw new Error('You must create an organization before configuring roles');
@@ -100,6 +113,7 @@ const Step3Roles = () => {
       }
       
       console.log('Updating permissions for title:', titleToUpdate);
+      console.log('Selected permissions:', values.permissions);
       
       // Safely check if this title already exists as a role
       const roles = onboardingData.roles || [];
@@ -116,7 +130,7 @@ const Step3Roles = () => {
           name: titleToUpdate.title,
           description: titleToUpdate.description,
           permissions: values.permissions,
-          title_id: titleToUpdate.titleId  // Include title_id in the update
+          title_id: titleToUpdate.titleId
         });
       } else {
         // Create new role based on title
@@ -125,7 +139,7 @@ const Step3Roles = () => {
           name: titleToUpdate.title,
           description: titleToUpdate.description,
           permissions: values.permissions,
-          title_id: titleToUpdate.titleId  // Include title_id when creating
+          title_id: titleToUpdate.titleId
         });
       }
       
@@ -140,8 +154,10 @@ const Step3Roles = () => {
       resetForm();
       setEditingTitleId(null);
     } catch (err) {
-      setError('Failed to update role: ' + err.message);
       console.error('Error updating role:', err);
+      setError('Failed to update role: ' + (err.message || 'Unknown error'));
+    } finally {
+      setSubmitting(false);
     }
   };
   
@@ -162,13 +178,26 @@ const Step3Roles = () => {
              role.title_id === title.titleId
     );
     
-    return existingRole?.permissions?.map(p => p.id) || title.permissions || [];
+    return existingRole?.permissions?.map(p => p.id.toString()) || title.permissions?.map(p => p.toString()) || [];
+  };
+
+  // Check if all titles have permissions assigned
+  const allTitlesHavePermissions = () => {
+    if (!titlesWithPermissions.length) return false;
+    
+    return titlesWithPermissions.every(title => {
+      const permissions = getTitlePermissions(title.id);
+      return permissions.length > 0;
+    });
   };
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+          <p className="text-secondary-600">Loading permissions...</p>
+        </div>
       </div>
     );
   }
@@ -196,8 +225,8 @@ const Step3Roles = () => {
           </div>
         )}
 
-        {/* Only show the rest of the content if organization exists */}
-        {onboardingData.organization && onboardingData.organization.id && (
+        {/* Only show the rest of the content if organization exists and no critical errors */}
+        {onboardingData.organization && onboardingData.organization.id && !error && (
           <div className="mb-8">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-secondary-900">Title Permissions</h3>
@@ -236,10 +265,10 @@ const Step3Roles = () => {
                     {({ isSubmitting, errors, touched, values }) => (
                       <Form className="space-y-6">
                         <div>
-                          <label className="label">
+                          <label className="block text-sm font-medium text-secondary-700 mb-2">
                             Permissions
                           </label>
-                          <div className="mt-2 bg-white rounded-lg border border-secondary-200 p-3">
+                          <div className="mt-2 bg-white rounded-lg border border-secondary-200 p-4">
                             <FieldArray name="permissions">
                               {() => (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -250,7 +279,7 @@ const Step3Roles = () => {
                                           type="checkbox"
                                           name="permissions"
                                           value={permission.id.toString()}
-                                          className="h-4 w-4 text-primary-600 border-secondary-300 rounded"
+                                          className="h-4 w-4 text-primary-600 border-secondary-300 rounded focus:ring-primary-500"
                                         />
                                       </div>
                                       <div className="ml-3 text-sm">
@@ -272,16 +301,24 @@ const Step3Roles = () => {
                           <button
                             type="button"
                             onClick={() => setEditingTitleId(null)}
-                            className="btn btn-secondary mr-2"
+                            className="mr-3 inline-flex items-center px-3 py-2 border border-secondary-300 shadow-sm text-sm font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                           >
                             Cancel
                           </button>
                           <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="btn btn-primary"
+                            className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                           >
-                            {isSubmitting ? 'Saving...' : 'Save Permissions'}
+                            {isSubmitting ? (
+                              <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Saving...
+                              </>
+                            ) : 'Save Permissions'}
                           </button>
                         </div>
                       </Form>
@@ -310,7 +347,7 @@ const Step3Roles = () => {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="bg-white rounded-lg border border-secondary-200 overflow-hidden"
+                      className="bg-white rounded-lg border border-secondary-200 overflow-hidden shadow-sm"
                     >
                       <div className="px-6 py-4">
                         <div className="flex justify-between items-center">
@@ -319,7 +356,7 @@ const Step3Roles = () => {
                             <button
                               type="button"
                               onClick={() => startEditing(titleItem.id)}
-                              className="text-primary-600 hover:text-primary-800"
+                              className="inline-flex items-center px-3 py-1.5 border border-secondary-300 text-sm font-medium rounded-md text-secondary-700 bg-white hover:bg-secondary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                               disabled={editingTitleId !== null}
                             >
                               {permissionIds.length > 0 ? 'Edit Permissions' : 'Assign Permissions'}
@@ -377,14 +414,19 @@ const Step3Roles = () => {
                 <p className="mt-1 text-sm text-secondary-500">
                   Please add titles in the previous step before configuring permissions.
                 </p>
+                <div className="mt-6">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/onboarding/team-members')}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Go Back to Add Titles
+                  </button>
+                </div>
               </div>
             )}
-          </div>
-        )}
 
-        {onboardingData.organization && onboardingData.organization.id && (
-          <>
-            <div className="text-secondary-600 bg-secondary-50 p-4 rounded-lg border border-secondary-200 mb-8">
+            <div className="text-secondary-600 bg-secondary-50 p-4 rounded-lg border border-secondary-200 mt-6">
               <p className="flex items-start">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary-500 mr-2 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -393,19 +435,35 @@ const Step3Roles = () => {
               </p>
             </div>
             
-            <div className="flex justify-end">
+            {/* Continue button - enable if all titles have permissions OR if user wants to skip */}
+            <div className="flex justify-between items-center mt-6">
               <button
                 type="button"
                 onClick={() => {
                   nextStep();
                   navigate('/onboarding/complete');
                 }}
-                className="btn btn-primary px-6 py-2"
+                className="text-secondary-600 hover:text-secondary-800 text-sm"
               >
-                Continue to Complete Setup
+                Skip for now
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  nextStep();
+                  navigate('/onboarding/complete');
+                }}
+                className={`${
+                  allTitlesHavePermissions() 
+                    ? 'bg-primary-600 hover:bg-primary-700 cursor-pointer' 
+                    : 'bg-primary-600 hover:bg-primary-700 cursor-pointer'
+                } inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500`}
+              >
+                {allTitlesHavePermissions() ? 'Complete Setup' : 'Continue to Complete Setup'}
               </button>
             </div>
-          </>
+          </div>
         )}
       </motion.div>
     </div>

@@ -127,11 +127,37 @@ export const authAPI = {
   }
 };
 
-// Organization API service
+// Organization API service - UPDATED WITH FILE UPLOAD SUPPORT
 export const organizationAPI = {
   createOrganization: async (organizationData) => {
-    const response = await api.post('organizations/', organizationData);
-    return response.data;
+    // Check if there's a file in the data
+    const hasFile = organizationData.logo && typeof organizationData.logo === 'object' && organizationData.logo instanceof File;
+    
+    if (hasFile) {
+      // Use FormData for file uploads
+      const formData = new FormData();
+      formData.append('name', organizationData.name);
+      formData.append('industry', organizationData.industry);
+      formData.append('size', organizationData.size);
+      formData.append('logo', organizationData.logo);
+      
+      const response = await api.post('organizations/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } else {
+      // Use JSON for data without files
+      const dataToSend = { ...organizationData };
+      // Remove logo if it's null or empty
+      if (!dataToSend.logo) {
+        delete dataToSend.logo;
+      }
+      
+      const response = await api.post('organizations/', dataToSend);
+      return response.data;
+    }
   },
   
   getOrganization: async () => {
@@ -140,8 +166,29 @@ export const organizationAPI = {
   },
   
   updateOrganization: async (id, organizationData) => {
-    const response = await api.patch(`organizations/${id}/`, organizationData);
-    return response.data;
+    // Check if there's a file in the data
+    const hasFile = organizationData.logo && typeof organizationData.logo === 'object' && organizationData.logo instanceof File;
+    
+    if (hasFile) {
+      // Use FormData for file uploads
+      const formData = new FormData();
+      Object.keys(organizationData).forEach(key => {
+        if (organizationData[key] !== null && organizationData[key] !== undefined) {
+          formData.append(key, organizationData[key]);
+        }
+      });
+      
+      const response = await api.patch(`organizations/${id}/`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } else {
+      // Use JSON for data without files
+      const response = await api.patch(`organizations/${id}/`, organizationData);
+      return response.data;
+    }
   },
 };
 
@@ -181,7 +228,7 @@ export const titlesAPI = {
   },
 };
 
-// Roles API service
+// Roles API service - FIXED with getPermissions function
 export const rolesAPI = {
   getRoles: async () => {
     const response = await api.get('roles/');
@@ -202,6 +249,12 @@ export const rolesAPI = {
     const response = await api.delete(`roles/${id}/`);
     return response.data;
   },
+  
+  // ADDED: getPermissions function
+  getPermissions: async () => {
+    const response = await api.get('titles/available_permissions/');
+    return response.data;
+  },
 };
 
 // Also keep the singular versions for backward compatibility
@@ -212,7 +265,7 @@ export const roleAPI = rolesAPI;
 // Permissions API service
 export const permissionAPI = {
   getPermissions: async () => {
-    const response = await api.get('permissions/');
+    const response = await api.get('titles/available_permissions/');
     return response.data;
   },
 };
