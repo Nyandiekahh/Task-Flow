@@ -68,7 +68,7 @@ export const OnboardingProvider = ({ children }) => {
     fetchOnboardingData();
   }, []);
 
-  // Add title
+  // Add title - FIXED: Now sends proper object format
   const addTitle = useCallback(async (titleName) => {
     try {
       setLoading(true);
@@ -81,7 +81,8 @@ export const OnboardingProvider = ({ children }) => {
         throw new Error(errorMsg);
       }
       
-      const newTitle = await titlesAPI.createTitle(titleName);
+      // FIXED: Send object with name property instead of just string
+      const newTitle = await titlesAPI.createTitle({ name: titleName });
       setTitles(prev => [...prev, newTitle]);
       
       return newTitle;
